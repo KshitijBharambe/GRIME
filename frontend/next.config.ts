@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import path from "node:path";
 
 const isDev = process.env.NODE_ENV !== "production";
 const devConnectSources = isDev
@@ -7,6 +8,7 @@ const devConnectSources = isDev
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  outputFileTracingRoot: path.join(__dirname, ".."),
   // Bundle optimization
   experimental: {
     optimizePackageImports: [

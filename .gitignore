@@ -1,23 +1,19 @@
 # === OS / Editor / IDE ===
-# macOS
 .DS_Store
-
-# VS Code / JetBrains
 .vscode/
 .idea/
 
 # === Python ===
-# bytecode, caches, virtualenvs, env files
 __pycache__/
-*.py[co]
-*.py[oc]   # keep original style (some editors create .pyoc)
+*.py[cod]
 *.egg-info/
 .venv/
+.pytest_cache/
+.ruff_cache/
 .env
 .env.*
-
-# pytest config (file)
-pytest.ini
+!.env.example
+!.env.prod-sim.example
 
 # === Node / Next.js ===
 node_modules/
@@ -27,47 +23,45 @@ out/
 *.log
 *.tsbuildinfo
 
-# === Angular (if used) ===
-.angular/
-
-# === Docker ===
-.dockerignore
-
-# === Build artifacts ===
+# === Build / Test artifacts ===
 build/
 wheels/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+test-results.xml
+.scannerwork/
+api/.coverage
+api/coverage.xml
+api/test-results.xml
+api/data/exports/
+
+# === Terraform ===
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+terraform/environments/*.tfvars
 
 # === Misc / Tools ===
-uv.lock
-
-# Gemini / Claude / Serena user data
 .gemini-clipboard
 .claude
 .serena
-
-# === Local data, test artifacts, and generated files ===
-63090a6f-b69a-457f-ac79-279f7c5c8fae.json
-cloudflared-config.yml
-test_rules.json
-test.csv
-repomix-output.xml
-
-# project-specific generated / exported data
-api/data/datasets/
-api/create_test_rules.py
-api/test_api.py
-api/test_rules_api.py
-
-# tests and test folders (ignore local test artifacts if you intentionally want them out of VCS)
-tests/
-
-# docs (ignored in original; kept as user had it)
-docs
+Backupfiles/
 .cleanup
 
-# any other local config
-.claude
-.serena
-Backupfiles
+# === Local data & generated files ===
+api/data/datasets/
+repomix-output.xml
 
-.scannerwork
+# Supabase
+.branches
+.temp
+
+# dotenvx
+.env.keys
+.env.local
+.env.*.local
+docs/
+tests/test_data

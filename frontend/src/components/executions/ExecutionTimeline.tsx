@@ -19,7 +19,6 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
-import { Criticality } from "@/types/api";
 import { Timer } from "lucide-react";
 
 interface RuleSnapshotData {
@@ -62,8 +61,6 @@ const criticalityColors: Record<string, string> = {
 
 export function ExecutionTimeline({
   rulePerformance,
-  startedAt,
-  finishedAt,
   durationSeconds,
 }: ExecutionTimelineProps) {
   const data = useMemo(() => {

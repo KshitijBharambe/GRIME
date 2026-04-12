@@ -11,6 +11,12 @@
 
 set -e
 
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+REPO_ROOT=$(cd -- "$SCRIPT_DIR/../.." && pwd)
+COMPOSE_FILE="$REPO_ROOT/docker/compose/docker-compose.prod-sim.yml"
+
+cd "$REPO_ROOT"
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -145,7 +151,7 @@ else
     echo -e "${YELLOW}⚠ Some services are unhealthy or not running${NC}"
     echo ""
     echo "To view logs for a specific service:"
-    echo "  docker-compose -f docker-compose.prod-sim.yml logs <service-name>"
+    echo "  docker compose -f $COMPOSE_FILE logs <service-name>"
     echo ""
     echo "To restart all services:"
     echo "  make prod-sim-restart"

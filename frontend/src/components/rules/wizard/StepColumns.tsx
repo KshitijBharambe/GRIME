@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { DatasetColumn } from "@/types/api";
 import { useDatasets, useDatasetColumns } from "@/lib/hooks/useDatasets";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

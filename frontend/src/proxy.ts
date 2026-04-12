@@ -10,7 +10,7 @@ const GUEST_RESTRICTED_PATTERNS = [
 ];
 
 export default withAuth(
-  function middleware(req) {
+  function proxy(req) {
     const token = req.nextauth.token;
     if (token?.accountType === "guest") {
       const pathname = req.nextUrl.pathname;
@@ -39,7 +39,6 @@ export default withAuth(
 
 export const config = {
   matcher: [
-    // Protect specific routes (dashboard, data, rules, etc)
     "/dashboard/:path*",
     "/data/:path*",
     "/rules/:path*",

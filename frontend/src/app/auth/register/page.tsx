@@ -119,7 +119,8 @@ export default function RegisterPage() {
 
         <blockquote className="relative max-w-sm border-l border-blue-400/40 pl-4 text-sm text-blue-200">
           <p>
-            "This is the first gate we trust before any training run goes live."
+            &quot;This is the first gate we trust before any training run goes
+            live.&quot;
           </p>
           <span className="mt-2 block text-blue-300">
             Data Platform Lead, Example Co.

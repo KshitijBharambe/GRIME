@@ -1,10 +1,16 @@
-'use client'
+"use client";
 
-import { useState, useEffect } from 'react'
-import { useSession } from 'next-auth/react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useState, useEffect, useCallback } from "react";
+import { useSession } from "next-auth/react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -12,7 +18,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table'
+} from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -20,18 +26,18 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
-import { Textarea } from '@/components/ui/textarea'
-import { Label } from '@/components/ui/label'
+} from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import {
   FileText,
   CheckCircle,
@@ -43,189 +49,213 @@ import {
   FolderTree,
   Database,
   AlertCircle,
-  Ban
-} from 'lucide-react'
-import { MainLayout } from '@/components/layout/main-layout'
-import { useAuthenticatedApi } from '@/lib/hooks/useAuthenticatedApi'
-import apiClient from '@/lib/api'
-import { AccessRequest, RequestType, RequestStatus } from '@/types/api'
+  Ban,
+} from "lucide-react";
+import { MainLayout } from "@/components/layout/main-layout";
+import { useAuthenticatedApi } from "@/lib/hooks/useAuthenticatedApi";
+import apiClient from "@/lib/api";
+import { AccessRequest, RequestType, RequestStatus } from "@/types/api";
 
 export default function RequestsPage() {
-  const { data: session } = useSession()
-  const { hasToken } = useAuthenticatedApi()
-  const [myRequests, setMyRequests] = useState<AccessRequest[]>([])
-  const [pendingApprovals, setPendingApprovals] = useState<AccessRequest[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
+  const { data: session } = useSession();
+  const { hasToken } = useAuthenticatedApi();
+  const [myRequests, setMyRequests] = useState<AccessRequest[]>([]);
+  const [pendingApprovals, setPendingApprovals] = useState<AccessRequest[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   // Filter states
-  const [statusFilter, setStatusFilter] = useState<string>('all')
-  const [typeFilter, setTypeFilter] = useState<string>('all')
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
 
   // Dialog states
-  const [showApprovalDialog, setShowApprovalDialog] = useState(false)
-  const [selectedRequest, setSelectedRequest] = useState<AccessRequest | null>(null)
-  const [adminNotes, setAdminNotes] = useState('')
-  const [isProcessing, setIsProcessing] = useState(false)
+  const [showApprovalDialog, setShowApprovalDialog] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState<AccessRequest | null>(
+    null,
+  );
+  const [adminNotes, setAdminNotes] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  const isOwnerOrAdmin = session?.user?.role === 'owner' || session?.user?.role === 'admin'
-  const isOwner = session?.user?.role === 'owner'
+  const isOwnerOrAdmin =
+    session?.user?.role === "owner" || session?.user?.role === "admin";
   // Password change only available for org accounts (not personal)
-  const isPersonalAccount = session?.user?.accountType === 'personal'
+  const isPersonalAccount = session?.user?.accountType === "personal";
 
-  useEffect(() => {
-    if (hasToken) loadRequests()
-  }, [hasToken])
-
-  const loadRequests = async () => {
-    setIsLoading(true)
-    setError('')
+  const loadRequests = useCallback(async () => {
+    setIsLoading(true);
+    setError("");
     try {
       const [myReqs, approvals] = await Promise.all([
         apiClient.getMyAccessRequests(),
         isOwnerOrAdmin ? apiClient.getPendingApprovals() : Promise.resolve([]),
-      ])
-      setMyRequests(myReqs)
-      setPendingApprovals(approvals)
+      ]);
+      setMyRequests(myReqs);
+      setPendingApprovals(approvals);
     } catch (err: unknown) {
-      const error = err as { response?: { data?: { detail?: string } } }
-      setError(error.response?.data?.detail || 'Failed to load requests')
+      const error = err as { response?: { data?: { detail?: string } } };
+      setError(error.response?.data?.detail || "Failed to load requests");
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  }, [isOwnerOrAdmin]);
+
+  useEffect(() => {
+    if (hasToken) {
+      void loadRequests();
+    }
+  }, [hasToken, loadRequests]);
 
   const handleApprove = async () => {
-    if (!selectedRequest) return
+    if (!selectedRequest) return;
 
-    setIsProcessing(true)
-    setError('')
-    setSuccess('')
+    setIsProcessing(true);
+    setError("");
+    setSuccess("");
 
     try {
-      await apiClient.approveAccessRequest(selectedRequest.id, { admin_notes: adminNotes })
-      setSuccess(`Request from ${selectedRequest.requester_name} has been approved`)
-      setShowApprovalDialog(false)
-      setSelectedRequest(null)
-      setAdminNotes('')
-      await loadRequests()
+      await apiClient.approveAccessRequest(selectedRequest.id, {
+        admin_notes: adminNotes,
+      });
+      setSuccess(
+        `Request from ${selectedRequest.requester_name} has been approved`,
+      );
+      setShowApprovalDialog(false);
+      setSelectedRequest(null);
+      setAdminNotes("");
+      await loadRequests();
     } catch (err: unknown) {
-      const error = err as { response?: { data?: { detail?: string } } }
-      setError(error.response?.data?.detail || 'Failed to approve request')
+      const error = err as { response?: { data?: { detail?: string } } };
+      setError(error.response?.data?.detail || "Failed to approve request");
     } finally {
-      setIsProcessing(false)
+      setIsProcessing(false);
     }
-  }
+  };
 
   const handleReject = async () => {
-    if (!selectedRequest) return
+    if (!selectedRequest) return;
 
-    setIsProcessing(true)
-    setError('')
-    setSuccess('')
+    setIsProcessing(true);
+    setError("");
+    setSuccess("");
 
     try {
-      await apiClient.rejectAccessRequest(selectedRequest.id, { admin_notes: adminNotes })
-      setSuccess(`Request from ${selectedRequest.requester_name} has been rejected`)
-      setShowApprovalDialog(false)
-      setSelectedRequest(null)
-      setAdminNotes('')
-      await loadRequests()
+      await apiClient.rejectAccessRequest(selectedRequest.id, {
+        admin_notes: adminNotes,
+      });
+      setSuccess(
+        `Request from ${selectedRequest.requester_name} has been rejected`,
+      );
+      setShowApprovalDialog(false);
+      setSelectedRequest(null);
+      setAdminNotes("");
+      await loadRequests();
     } catch (err: unknown) {
-      const error = err as { response?: { data?: { detail?: string } } }
-      setError(error.response?.data?.detail || 'Failed to reject request')
+      const error = err as { response?: { data?: { detail?: string } } };
+      setError(error.response?.data?.detail || "Failed to reject request");
     } finally {
-      setIsProcessing(false)
+      setIsProcessing(false);
     }
-  }
+  };
 
   const handleCancel = async (requestId: string) => {
     try {
-      await apiClient.cancelAccessRequest(requestId)
-      setSuccess('Request cancelled successfully')
-      await loadRequests()
+      await apiClient.cancelAccessRequest(requestId);
+      setSuccess("Request cancelled successfully");
+      await loadRequests();
     } catch (err: unknown) {
-      const error = err as { response?: { data?: { detail?: string } } }
-      setError(error.response?.data?.detail || 'Failed to cancel request')
+      const error = err as { response?: { data?: { detail?: string } } };
+      setError(error.response?.data?.detail || "Failed to cancel request");
     }
-  }
+  };
 
   const getRequestTypeIcon = (type: RequestType) => {
     switch (type) {
-      case 'password_change':
-        return <Key className="h-4 w-4" />
-      case 'role_change':
-        return <UserCog className="h-4 w-4" />
-      case 'compartment_access':
-        return <FolderTree className="h-4 w-4" />
-      case 'data_access':
-        return <Database className="h-4 w-4" />
+      case "password_change":
+        return <Key className="h-4 w-4" />;
+      case "role_change":
+        return <UserCog className="h-4 w-4" />;
+      case "compartment_access":
+        return <FolderTree className="h-4 w-4" />;
+      case "data_access":
+        return <Database className="h-4 w-4" />;
       default:
-        return <FileText className="h-4 w-4" />
+        return <FileText className="h-4 w-4" />;
     }
-  }
+  };
 
   const getRequestTypeLabel = (type: RequestType) => {
     switch (type) {
-      case 'password_change':
-        return 'Password Change'
-      case 'role_change':
-        return 'Role Change'
-      case 'compartment_access':
-        return 'Compartment Access'
-      case 'data_access':
-        return 'Data Access'
+      case "password_change":
+        return "Password Change";
+      case "role_change":
+        return "Role Change";
+      case "compartment_access":
+        return "Compartment Access";
+      case "data_access":
+        return "Data Access";
       default:
-        return type
+        return type;
     }
-  }
+  };
 
   const getStatusBadge = (status: RequestStatus) => {
     switch (status) {
-      case 'pending':
+      case "pending":
         return (
-          <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
+          <Badge
+            variant="outline"
+            className="bg-yellow-50 text-yellow-700 border-yellow-200"
+          >
             <Clock className="mr-1 h-3 w-3" />
             Pending
           </Badge>
-        )
-      case 'approved':
+        );
+      case "approved":
         return (
-          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+          <Badge
+            variant="outline"
+            className="bg-green-50 text-green-700 border-green-200"
+          >
             <CheckCircle className="mr-1 h-3 w-3" />
             Approved
           </Badge>
-        )
-      case 'rejected':
+        );
+      case "rejected":
         return (
-          <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
+          <Badge
+            variant="outline"
+            className="bg-red-50 text-red-700 border-red-200"
+          >
             <XCircle className="mr-1 h-3 w-3" />
             Rejected
           </Badge>
-        )
-      case 'cancelled':
+        );
+      case "cancelled":
         return (
-          <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">
+          <Badge
+            variant="outline"
+            className="bg-gray-50 text-gray-700 border-gray-200"
+          >
             <Ban className="mr-1 h-3 w-3" />
             Cancelled
           </Badge>
-        )
+        );
       default:
-        return <Badge variant="outline">{status}</Badge>
+        return <Badge variant="outline">{status}</Badge>;
     }
-  }
+  };
 
   const filterRequests = (requests: AccessRequest[]) => {
-    return requests.filter(req => {
-      const statusMatch = statusFilter === 'all' || req.status === statusFilter
-      const typeMatch = typeFilter === 'all' || req.request_type === typeFilter
-      return statusMatch && typeMatch
-    })
-  }
+    return requests.filter((req) => {
+      const statusMatch = statusFilter === "all" || req.status === statusFilter;
+      const typeMatch = typeFilter === "all" || req.request_type === typeFilter;
+      return statusMatch && typeMatch;
+    });
+  };
 
-  const filteredMyRequests = filterRequests(myRequests)
-  const filteredPendingApprovals = filterRequests(pendingApprovals)
+  const filteredMyRequests = filterRequests(myRequests);
+  const filteredPendingApprovals = filterRequests(pendingApprovals);
 
   if (isLoading) {
     return (
@@ -234,7 +264,7 @@ export default function RequestsPage() {
           <Loader2 className="h-8 w-8 animate-spin" />
         </div>
       </MainLayout>
-    )
+    );
   }
 
   return (
@@ -291,9 +321,15 @@ export default function RequestsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Types</SelectItem>
-                    {!isPersonalAccount && <SelectItem value="password_change">Password Change</SelectItem>}
+                    {!isPersonalAccount && (
+                      <SelectItem value="password_change">
+                        Password Change
+                      </SelectItem>
+                    )}
                     <SelectItem value="role_change">Role Change</SelectItem>
-                    <SelectItem value="compartment_access">Compartment Access</SelectItem>
+                    <SelectItem value="compartment_access">
+                      Compartment Access
+                    </SelectItem>
                     <SelectItem value="data_access">Data Access</SelectItem>
                   </SelectContent>
                 </Select>
@@ -310,7 +346,12 @@ export default function RequestsPage() {
             </TabsTrigger>
             {isOwnerOrAdmin && (
               <TabsTrigger value="pending-approvals">
-                Pending Approvals ({filteredPendingApprovals.filter(r => r.status === 'pending').length})
+                Pending Approvals (
+                {
+                  filteredPendingApprovals.filter((r) => r.status === "pending")
+                    .length
+                }
+                )
               </TabsTrigger>
             )}
           </TabsList>
@@ -351,15 +392,17 @@ export default function RequestsPage() {
                               </span>
                             </div>
                           </TableCell>
-                          <TableCell>{getStatusBadge(request.status)}</TableCell>
+                          <TableCell>
+                            {getStatusBadge(request.status)}
+                          </TableCell>
                           <TableCell className="max-w-xs truncate">
-                            {request.reason || '-'}
+                            {request.reason || "-"}
                           </TableCell>
                           <TableCell>
                             {new Date(request.created_at).toLocaleDateString()}
                           </TableCell>
                           <TableCell>
-                            {request.status === 'pending' && (
+                            {request.status === "pending" && (
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -373,8 +416,8 @@ export default function RequestsPage() {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => {
-                                  setSelectedRequest(request)
-                                  setShowApprovalDialog(true)
+                                  setSelectedRequest(request);
+                                  setShowApprovalDialog(true);
                                 }}
                               >
                                 View Notes
@@ -421,7 +464,9 @@ export default function RequestsPage() {
                           <TableRow key={request.id}>
                             <TableCell>
                               <div>
-                                <div className="font-medium">{request.requester_name}</div>
+                                <div className="font-medium">
+                                  {request.requester_name}
+                                </div>
                                 <div className="text-sm text-muted-foreground">
                                   {request.requester_email}
                                 </div>
@@ -430,24 +475,28 @@ export default function RequestsPage() {
                             <TableCell>
                               <div className="flex items-center gap-2">
                                 {getRequestTypeIcon(request.request_type)}
-                                <span>{getRequestTypeLabel(request.request_type)}</span>
+                                <span>
+                                  {getRequestTypeLabel(request.request_type)}
+                                </span>
                               </div>
                             </TableCell>
                             <TableCell className="max-w-xs truncate">
-                              {request.reason || '-'}
+                              {request.reason || "-"}
                             </TableCell>
                             <TableCell>
-                              {new Date(request.created_at).toLocaleDateString()}
+                              {new Date(
+                                request.created_at,
+                              ).toLocaleDateString()}
                             </TableCell>
                             <TableCell>
-                              {request.status === 'pending' && (
+                              {request.status === "pending" && (
                                 <div className="flex gap-2">
                                   <Button
                                     variant="default"
                                     size="sm"
                                     onClick={() => {
-                                      setSelectedRequest(request)
-                                      setShowApprovalDialog(true)
+                                      setSelectedRequest(request);
+                                      setShowApprovalDialog(true);
                                     }}
                                   >
                                     <CheckCircle className="mr-1 h-4 w-4" />
@@ -481,14 +530,20 @@ export default function RequestsPage() {
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label className="text-sm text-muted-foreground">Requester</Label>
-                    <div className="font-medium">{selectedRequest.requester_name}</div>
+                    <Label className="text-sm text-muted-foreground">
+                      Requester
+                    </Label>
+                    <div className="font-medium">
+                      {selectedRequest.requester_name}
+                    </div>
                     <div className="text-sm text-muted-foreground">
                       {selectedRequest.requester_email}
                     </div>
                   </div>
                   <div>
-                    <Label className="text-sm text-muted-foreground">Request Type</Label>
+                    <Label className="text-sm text-muted-foreground">
+                      Request Type
+                    </Label>
                     <div className="flex items-center gap-2 font-medium">
                       {getRequestTypeIcon(selectedRequest.request_type)}
                       {getRequestTypeLabel(selectedRequest.request_type)}
@@ -498,19 +553,25 @@ export default function RequestsPage() {
 
                 {selectedRequest.reason && (
                   <div>
-                    <Label className="text-sm text-muted-foreground">Reason</Label>
+                    <Label className="text-sm text-muted-foreground">
+                      Reason
+                    </Label>
                     <p className="mt-1">{selectedRequest.reason}</p>
                   </div>
                 )}
 
                 {selectedRequest.admin_notes && (
                   <div>
-                    <Label className="text-sm text-muted-foreground">Admin Notes</Label>
-                    <p className="mt-1 text-sm">{selectedRequest.admin_notes}</p>
+                    <Label className="text-sm text-muted-foreground">
+                      Admin Notes
+                    </Label>
+                    <p className="mt-1 text-sm">
+                      {selectedRequest.admin_notes}
+                    </p>
                   </div>
                 )}
 
-                {selectedRequest.status === 'pending' && (
+                {selectedRequest.status === "pending" && (
                   <div>
                     <Label htmlFor="admin-notes">Your Notes (Optional)</Label>
                     <Textarea
@@ -526,13 +587,13 @@ export default function RequestsPage() {
             )}
 
             <DialogFooter>
-              {selectedRequest?.status === 'pending' ? (
+              {selectedRequest?.status === "pending" ? (
                 <>
                   <Button
                     variant="outline"
                     onClick={() => {
-                      setShowApprovalDialog(false)
-                      setAdminNotes('')
+                      setShowApprovalDialog(false);
+                      setAdminNotes("");
                     }}
                     disabled={isProcessing}
                   >
@@ -543,15 +604,16 @@ export default function RequestsPage() {
                     onClick={handleReject}
                     disabled={isProcessing}
                   >
-                    {isProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {isProcessing && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
                     <XCircle className="mr-2 h-4 w-4" />
                     Reject
                   </Button>
-                  <Button
-                    onClick={handleApprove}
-                    disabled={isProcessing}
-                  >
-                    {isProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  <Button onClick={handleApprove} disabled={isProcessing}>
+                    {isProcessing && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
                     <CheckCircle className="mr-2 h-4 w-4" />
                     Approve
                   </Button>
@@ -559,8 +621,8 @@ export default function RequestsPage() {
               ) : (
                 <Button
                   onClick={() => {
-                    setShowApprovalDialog(false)
-                    setAdminNotes('')
+                    setShowApprovalDialog(false);
+                    setAdminNotes("");
                   }}
                 >
                   Close
@@ -571,5 +633,5 @@ export default function RequestsPage() {
         </Dialog>
       </div>
     </MainLayout>
-  )
+  );
 }

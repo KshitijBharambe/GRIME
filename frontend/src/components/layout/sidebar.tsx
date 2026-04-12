@@ -30,6 +30,7 @@ import {
   UserPlus,
   Cable,
   Layers,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSession } from "next-auth/react";
@@ -260,11 +261,15 @@ function NavItemComponent({
   level = 0,
   isExpanded = false,
   onToggleExpanded,
+  navigatingTo,
+  onNavigate,
 }: Readonly<{
   item: NavItem;
   level?: number;
   isExpanded?: boolean;
   onToggleExpanded?: () => void;
+  navigatingTo?: string | null;
+  onNavigate?: (href: string) => void;
 }>) {
   const pathname = usePathname();
   const { data: session } = useSession();
@@ -291,10 +296,16 @@ function NavItemComponent({
   const shouldBeExpanded = item.children ? isExpanded || hasActiveChild : false;
 
   const handleClick = () => {
+    if (item.href && onNavigate) {
+      onNavigate(item.href);
+    }
+
     if (item.children && onToggleExpanded) {
       onToggleExpanded();
     }
   };
+
+  const isNavigatingToItem = Boolean(item.href && navigatingTo === item.href);
 
   const itemContent = (
     <div
@@ -318,27 +329,32 @@ function NavItemComponent({
         )}
       />
       <span className="flex-1 text-sm font-medium truncate">{item.title}</span>
-      {item.badge && (
-        <span
-          className={cn(
-            "rounded-full border px-1.5 py-0.5 text-[0.6rem] font-mono font-bold uppercase tracking-wider",
-            isActive
-              ? "border-[var(--sidebar-border)] bg-background text-[var(--sidebar-primary)]"
-              : "border-[var(--sidebar-border)] bg-background text-[var(--muted-foreground)]",
-          )}
-        >
-          {item.badge}
-        </span>
-      )}
-      {item.children && (
-        <div className="ml-auto opacity-60">
-          {shouldBeExpanded ? (
-            <ChevronDown className="h-3.5 w-3.5" />
-          ) : (
-            <ChevronRight className="h-3.5 w-3.5" />
-          )}
-        </div>
-      )}
+      <div className="ml-auto flex items-center gap-2">
+        {isNavigatingToItem && (
+          <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+        )}
+        {item.badge && (
+          <span
+            className={cn(
+              "rounded-full border px-1.5 py-0.5 text-[0.6rem] font-mono font-bold uppercase tracking-wider",
+              isActive
+                ? "border-[var(--sidebar-border)] bg-background text-[var(--sidebar-primary)]"
+                : "border-[var(--sidebar-border)] bg-background text-[var(--muted-foreground)]",
+            )}
+          >
+            {item.badge}
+          </span>
+        )}
+        {item.children && (
+          <div className="opacity-60">
+            {shouldBeExpanded ? (
+              <ChevronDown className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5" />
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 
@@ -377,6 +393,8 @@ function NavItemComponent({
               level={level + 1}
               isExpanded={false}
               onToggleExpanded={undefined}
+              navigatingTo={navigatingTo}
+              onNavigate={onNavigate}
             />
           ))}
         </div>
@@ -397,6 +415,7 @@ export function Sidebar({ isOpen, onClose }: Readonly<SidebarProps>) {
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>(
     {},
   );
+  const [navigatingTo, setNavigatingTo] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const pathname = usePathname();
 
@@ -411,6 +430,8 @@ export function Sidebar({ isOpen, onClose }: Readonly<SidebarProps>) {
 
   // Auto-expand items with active children
   useEffect(() => {
+    setNavigatingTo(null);
+
     if (mounted && navigationItems) {
       setExpandedItems((prev) => {
         const newExpandedItems = { ...prev };
@@ -493,6 +514,8 @@ export function Sidebar({ isOpen, onClose }: Readonly<SidebarProps>) {
                   item={item}
                   isExpanded={expandedItems[item.title] || false}
                   onToggleExpanded={() => toggleExpanded(item.title)}
+                  navigatingTo={navigatingTo}
+                  onNavigate={setNavigatingTo}
                 />
               ))}
             </nav>

@@ -1,10 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
+import { Suspense } from "react";
 import "./globals.css";
 import { AuthProvider } from "@/components/providers/auth-provider";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { ThemeProvider as NextThemesProvider } from "next-themes";
 import { CommandPalette } from "@/components/command-palette/CommandPalette";
+import { PageProgress } from "@/components/ui/page-progress";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -57,6 +59,9 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
+          <Suspense fallback={null}>
+            <PageProgress />
+          </Suspense>
           <AuthProvider>
             <QueryProvider>
               <CommandPalette />

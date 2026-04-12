@@ -18,7 +18,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { useExecutions } from "@/lib/hooks/useExecutions";
-import { Execution, ExecutionStatus } from "@/types/api";
+import { ExecutionStatus } from "@/types/api";
 import { BarChart3 } from "lucide-react";
 import { useMemo } from "react";
 

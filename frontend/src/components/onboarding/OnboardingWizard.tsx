@@ -1,6 +1,5 @@
 "use client";
 
-
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronUp, X, Check } from "lucide-react";
@@ -172,7 +171,7 @@ export function OnboardingWizard() {
                     key={step.id}
                     className={cn(
                       "flex items-center justify-between gap-4 rounded-lg px-3 py-2.5 transition-colors",
-                      done ? "bg-muted/30" : "bg-muted/20 hover:bg-muted/40"
+                      done ? "bg-muted/30" : "bg-muted/20 hover:bg-muted/40",
                     )}
                   >
                     {/* Step number + text */}
@@ -182,7 +181,7 @@ export function OnboardingWizard() {
                           "text-[11px] font-mono font-semibold shrink-0 mt-px leading-tight",
                           done
                             ? "text-muted-foreground/50"
-                            : "text-muted-foreground"
+                            : "text-muted-foreground",
                         )}
                       >
                         {step.num}
@@ -191,7 +190,7 @@ export function OnboardingWizard() {
                         <p
                           className={cn(
                             "text-sm font-medium leading-tight",
-                            done && "line-through text-muted-foreground"
+                            done && "line-through text-muted-foreground",
                           )}
                         >
                           {step.title}
@@ -227,101 +226,6 @@ export function OnboardingWizard() {
           )}
         </>
       )}
-    </div>
-  );
-}
-                  {current.description}
-                </p>
-                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                  {current.detail}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex shrink-0 flex-col gap-2 sm:flex-row lg:flex-col lg:items-stretch">
-            <Button asChild size="sm" className="sm:min-w-36">
-              <Link href={current.href}>
-                {current.actionLabel}
-                <ChevronRight className="ml-1 h-4 w-4" />
-              </Link>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                step < STEPS.length - 1 ? setStep(step + 1) : dismiss()
-              }
-              className="sm:min-w-36"
-            >
-              {step < STEPS.length - 1 ? "Next step" : "Finish guide"}
-            </Button>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          {STEPS.map((item, index) => {
-            const Icon = item.icon;
-            const stateLabel =
-              index === step
-                ? "Current"
-                : index < step
-                  ? "Available"
-                  : `Step ${index + 1}`;
-
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setStep(index)}
-                className={cn(
-                  "flex w-full items-start gap-3 rounded-lg border px-3 py-3 text-left transition-colors",
-                  index === step
-                    ? "border-foreground/15 bg-muted/30"
-                    : "border-border/70 bg-background hover:bg-muted/20",
-                )}
-              >
-                <div
-                  className={cn(
-                    "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-xs font-medium",
-                    index < step
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                      : index === step
-                        ? "border-foreground/15 bg-background text-foreground"
-                        : "border-border bg-background text-muted-foreground",
-                  )}
-                >
-                  {index < step ? (
-                    <CheckCircle2 className="h-4 w-4" />
-                  ) : (
-                    index + 1
-                  )}
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-center gap-2">
-                      <Icon className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm font-medium">{item.title}</span>
-                    </div>
-                    <span className="text-xs font-medium text-muted-foreground">
-                      {stateLabel}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {item.description}
-                  </p>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        <p className="text-xs text-muted-foreground">
-          Progress is saved in this browser, so you can return later without
-          losing your place.
-        </p>
-      </div>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import {
@@ -25,25 +25,7 @@ export function OrganizationSwitcher() {
     session?.user?.organizationId,
   );
 
-  useEffect(() => {
-    if (status !== "authenticated") {
-      return;
-    }
-
-    if (session?.accessToken) {
-      apiClient.setToken(session.accessToken);
-    }
-
-    loadOrganizations();
-  }, [status, session?.accessToken]);
-
-  useEffect(() => {
-    if (session?.user?.organizationId) {
-      setCurrentOrgId(session.user.organizationId);
-    }
-  }, [session]);
-
-  const loadOrganizations = async () => {
+  const loadOrganizations = useCallback(async () => {
     if (status !== "authenticated") {
       return;
     }
@@ -54,7 +36,25 @@ export function OrganizationSwitcher() {
     } catch (error) {
       console.error("Failed to load organizations:", error);
     }
-  };
+  }, [status]);
+
+  useEffect(() => {
+    if (status !== "authenticated") {
+      return;
+    }
+
+    if (session?.accessToken) {
+      apiClient.setToken(session.accessToken);
+    }
+
+    void loadOrganizations();
+  }, [status, session?.accessToken, loadOrganizations]);
+
+  useEffect(() => {
+    if (session?.user?.organizationId) {
+      setCurrentOrgId(session.user.organizationId);
+    }
+  }, [session]);
 
   const handleSwitchOrganization = async (orgId: string) => {
     if (orgId === currentOrgId) return;

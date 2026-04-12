@@ -4,17 +4,14 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Home,
-  Database,
   Upload,
   FileSpreadsheet,
   BarChart3,
-  Shield,
   CheckSquare,
   Settings,
   Play,
   Activity,
   AlertTriangle,
-  FileText,
   Download,
   Brain,
   Lightbulb,

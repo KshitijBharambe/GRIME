@@ -42,7 +42,6 @@ import { MainLayout } from "@/components/layout/main-layout";
 export default function UserProfilePage() {
   const { data: session, update } = useSession();
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -60,8 +59,6 @@ export default function UserProfilePage() {
 
   const isOwner = session?.user?.role === "owner";
   const isAdmin = session?.user?.role === "admin";
-  const isAnalystOrViewer =
-    session?.user?.role === "analyst" || session?.user?.role === "viewer";
 
   // Update form when session changes
   useEffect(() => {
@@ -84,7 +81,7 @@ export default function UserProfilePage() {
     try {
       // Note: This assumes there's an endpoint to update user profile
       // You may need to add this endpoint to your API client
-      const response = await apiClient.put(`/auth/me`, {
+      await apiClient.put(`/auth/me`, {
         name,
         email,
       });

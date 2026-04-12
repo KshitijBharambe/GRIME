@@ -1,12 +1,18 @@
-'use client'
+"use client";
 
-import { useState, useEffect } from 'react'
-import { useSession } from 'next-auth/react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
+import { useState, useEffect, useCallback } from "react";
+import { useSession } from "next-auth/react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -14,7 +20,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table'
+} from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -22,14 +28,14 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
+} from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,15 +45,14 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
+} from "@/components/ui/alert-dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import {
   FolderTree,
   Plus,
   Edit,
   Trash2,
-  Users,
   Loader2,
   AlertCircle,
   ChevronRight,
@@ -56,20 +61,20 @@ import {
   UserPlus,
   X,
   Link,
-} from 'lucide-react'
-import { MainLayout } from '@/components/layout/main-layout'
-import { useAuthenticatedApi } from '@/lib/hooks/useAuthenticatedApi'
-import apiClient from '@/lib/api'
-import { Compartment, CompartmentMember, UserRole } from '@/types/api'
+} from "lucide-react";
+import { MainLayout } from "@/components/layout/main-layout";
+import { useAuthenticatedApi } from "@/lib/hooks/useAuthenticatedApi";
+import apiClient from "@/lib/api";
+import { Compartment, CompartmentMember, UserRole } from "@/types/api";
 
 interface CompartmentTreeItemProps {
-  readonly compartment: Compartment
-  readonly level: number
-  onSelect: (compartment: Compartment) => void
-  onEdit: (compartment: Compartment) => void
-  onDelete: (compartment: Compartment) => void
-  onAddChild: (parent: Compartment) => void
-  readonly selected?: string
+  readonly compartment: Compartment;
+  readonly level: number;
+  onSelect: (compartment: Compartment) => void;
+  onEdit: (compartment: Compartment) => void;
+  onDelete: (compartment: Compartment) => void;
+  onAddChild: (parent: Compartment) => void;
+  readonly selected?: string;
 }
 
 function CompartmentTreeItem({
@@ -81,14 +86,14 @@ function CompartmentTreeItem({
   onAddChild,
   selected,
 }: CompartmentTreeItemProps) {
-  const [isExpanded, setIsExpanded] = useState(true)
-  const hasChildren = compartment.children && compartment.children.length > 0
+  const [isExpanded, setIsExpanded] = useState(true);
+  const hasChildren = compartment.children && compartment.children.length > 0;
 
   return (
     <div>
       <div
         className={`flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-muted ${
-          selected === compartment.id ? 'bg-muted' : ''
+          selected === compartment.id ? "bg-muted" : ""
         }`}
         style={{ paddingLeft: `${level * 20 + 8}px` }}
       >
@@ -119,8 +124,8 @@ function CompartmentTreeItem({
             size="icon"
             className="h-7 w-7"
             onClick={(e) => {
-              e.stopPropagation()
-              onAddChild(compartment)
+              e.stopPropagation();
+              onAddChild(compartment);
             }}
           >
             <Plus className="h-3 w-3" />
@@ -130,8 +135,8 @@ function CompartmentTreeItem({
             size="icon"
             className="h-7 w-7"
             onClick={(e) => {
-              e.stopPropagation()
-              onEdit(compartment)
+              e.stopPropagation();
+              onEdit(compartment);
             }}
           >
             <Edit className="h-3 w-3" />
@@ -142,8 +147,8 @@ function CompartmentTreeItem({
               size="icon"
               className="h-7 w-7"
               onClick={(e) => {
-                e.stopPropagation()
-                onDelete(compartment)
+                e.stopPropagation();
+                onDelete(compartment);
               }}
             >
               <Trash2 className="h-3 w-3 text-red-500" />
@@ -168,202 +173,230 @@ function CompartmentTreeItem({
         </div>
       )}
     </div>
-  )
+  );
 }
 
 export default function CompartmentsPage() {
-  const { data: session } = useSession()
-  const { hasToken } = useAuthenticatedApi()
-  const [compartments, setCompartments] = useState<Compartment[]>([])
-  const [selectedCompartment, setSelectedCompartment] = useState<Compartment | null>(null)
-  const [members, setMembers] = useState<CompartmentMember[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
+  const { data: session } = useSession();
+  const { hasToken } = useAuthenticatedApi();
+  const [compartments, setCompartments] = useState<Compartment[]>([]);
+  const [selectedCompartment, setSelectedCompartment] =
+    useState<Compartment | null>(null);
+  const [members, setMembers] = useState<CompartmentMember[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   // Create/Edit dialog state
-  const [showCompartmentDialog, setShowCompartmentDialog] = useState(false)
-  const [isEditMode, setIsEditMode] = useState(false)
-  const [editingCompartment, setEditingCompartment] = useState<Compartment | null>(null)
-  const [parentCompartment, setParentCompartment] = useState<Compartment | null>(null)
-  const [compartmentName, setCompartmentName] = useState('')
-  const [compartmentDescription, setCompartmentDescription] = useState('')
-  const [isSaving, setIsSaving] = useState(false)
+  const [showCompartmentDialog, setShowCompartmentDialog] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingCompartment, setEditingCompartment] =
+    useState<Compartment | null>(null);
+  const [parentCompartment, setParentCompartment] =
+    useState<Compartment | null>(null);
+  const [compartmentName, setCompartmentName] = useState("");
+  const [compartmentDescription, setCompartmentDescription] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   // Delete confirmation state
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-  const [deletingCompartment, setDeletingCompartment] = useState<Compartment | null>(null)
-  const [isDeleting, setIsDeleting] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deletingCompartment, setDeletingCompartment] =
+    useState<Compartment | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Add member dialog state — with invite verification
-  const [showMemberDialog, setShowMemberDialog] = useState(false)
-  const [memberEmail, setMemberEmail] = useState('')
-  const [memberRole, setMemberRole] = useState<UserRole>('analyst')
-  const [isAddingMember, setIsAddingMember] = useState(false)
-  const [memberNotRegistered, setMemberNotRegistered] = useState(false)
-  const [registrationLink] = useState(`${typeof window !== 'undefined' ? window.location.origin : ''}/auth/register`)
+  const [showMemberDialog, setShowMemberDialog] = useState(false);
+  const [memberEmail, setMemberEmail] = useState("");
+  const [memberRole, setMemberRole] = useState<UserRole>("analyst");
+  const [isAddingMember, setIsAddingMember] = useState(false);
+  const [memberNotRegistered, setMemberNotRegistered] = useState(false);
+  const [registrationLink] = useState(
+    `${typeof window !== "undefined" ? window.location.origin : ""}/auth/register`,
+  );
 
-  const isOwnerOrAdmin = session?.user?.role === 'owner' || session?.user?.role === 'admin'
+  const isOwnerOrAdmin =
+    session?.user?.role === "owner" || session?.user?.role === "admin";
+
+  const loadCompartments = useCallback(async () => {
+    setIsLoading(true);
+    setError("");
+    try {
+      const data = await apiClient.getCompartments();
+      setCompartments(data);
+      setSelectedCompartment((prev) => prev ?? data[0] ?? null);
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { detail?: string } } };
+      setError(error.response?.data?.detail || "Failed to load compartments");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    if (hasToken) loadCompartments()
-  }, [hasToken])
+    if (hasToken) {
+      void loadCompartments();
+    }
+  }, [hasToken, loadCompartments]);
 
   useEffect(() => {
     if (selectedCompartment && hasToken) {
-      loadMembers(selectedCompartment.id)
+      loadMembers(selectedCompartment.id);
     }
-  }, [selectedCompartment, hasToken])
+  }, [selectedCompartment, hasToken]);
 
   // Reset unregistered warning when email changes
   useEffect(() => {
-    setMemberNotRegistered(false)
-  }, [memberEmail])
-
-  const loadCompartments = async () => {
-    setIsLoading(true)
-    setError('')
-    try {
-      const data = await apiClient.getCompartments()
-      setCompartments(data)
-      if (data.length > 0 && !selectedCompartment) {
-        setSelectedCompartment(data[0])
-      }
-    } catch (err: unknown) {
-      const error = err as { response?: { data?: { detail?: string } } }
-      setError(error.response?.data?.detail || 'Failed to load compartments')
-    } finally {
-      setIsLoading(false)
-    }
-  }
+    setMemberNotRegistered(false);
+  }, [memberEmail]);
 
   const loadMembers = async (compartmentId: string) => {
     try {
-      const data = await apiClient.getCompartmentMembers(compartmentId)
-      setMembers(data)
+      const data = await apiClient.getCompartmentMembers(compartmentId);
+      setMembers(data);
     } catch (err: unknown) {
-      const error = err as { response?: { data?: { detail?: string } } }
-      setError(error.response?.data?.detail || 'Failed to load members')
+      const error = err as { response?: { data?: { detail?: string } } };
+      setError(error.response?.data?.detail || "Failed to load members");
     }
-  }
+  };
 
   const handleCreateCompartment = (parent?: Compartment) => {
-    setIsEditMode(false)
-    setEditingCompartment(null)
-    setParentCompartment(parent || null)
-    setCompartmentName('')
-    setCompartmentDescription('')
-    setShowCompartmentDialog(true)
-  }
+    setIsEditMode(false);
+    setEditingCompartment(null);
+    setParentCompartment(parent || null);
+    setCompartmentName("");
+    setCompartmentDescription("");
+    setShowCompartmentDialog(true);
+  };
 
   const handleEditCompartment = (compartment: Compartment) => {
-    setIsEditMode(true)
-    setEditingCompartment(compartment)
-    setCompartmentName(compartment.name)
-    setCompartmentDescription(compartment.description || '')
-    setShowCompartmentDialog(true)
-  }
+    setIsEditMode(true);
+    setEditingCompartment(compartment);
+    setCompartmentName(compartment.name);
+    setCompartmentDescription(compartment.description || "");
+    setShowCompartmentDialog(true);
+  };
 
   const handleDeleteCompartment = (compartment: Compartment) => {
-    setDeletingCompartment(compartment)
-    setShowDeleteDialog(true)
-  }
+    setDeletingCompartment(compartment);
+    setShowDeleteDialog(true);
+  };
 
   const handleSaveCompartment = async () => {
     if (!compartmentName) {
-      setError('Compartment name is required')
-      return
+      setError("Compartment name is required");
+      return;
     }
 
-    setIsSaving(true)
-    setError('')
-    setSuccess('')
+    setIsSaving(true);
+    setError("");
+    setSuccess("");
 
     try {
       if (isEditMode && editingCompartment) {
-        await apiClient.updateCompartment(editingCompartment.id, { name: compartmentName, description: compartmentDescription })
-        setSuccess('Compartment updated successfully')
+        await apiClient.updateCompartment(editingCompartment.id, {
+          name: compartmentName,
+          description: compartmentDescription,
+        });
+        setSuccess("Compartment updated successfully");
       } else {
-        await apiClient.createCompartment({ name: compartmentName, description: compartmentDescription, parent_compartment_id: parentCompartment?.id })
-        setSuccess('Compartment created successfully')
+        await apiClient.createCompartment({
+          name: compartmentName,
+          description: compartmentDescription,
+          parent_compartment_id: parentCompartment?.id,
+        });
+        setSuccess("Compartment created successfully");
       }
-      setShowCompartmentDialog(false)
-      await loadCompartments()
+      setShowCompartmentDialog(false);
+      await loadCompartments();
     } catch (err: unknown) {
-      const error = err as { response?: { data?: { detail?: string } } }
-      setError(error.response?.data?.detail || 'Failed to save compartment')
+      const error = err as { response?: { data?: { detail?: string } } };
+      setError(error.response?.data?.detail || "Failed to save compartment");
     } finally {
-      setIsSaving(false)
+      setIsSaving(false);
     }
-  }
+  };
 
   const handleConfirmDelete = async () => {
-    if (!deletingCompartment) return
+    if (!deletingCompartment) return;
 
-    setIsDeleting(true)
-    setError('')
-    setSuccess('')
+    setIsDeleting(true);
+    setError("");
+    setSuccess("");
 
     try {
-      await apiClient.deleteCompartment(deletingCompartment.id)
-      setSuccess('Compartment deleted successfully')
-      setShowDeleteDialog(false)
+      await apiClient.deleteCompartment(deletingCompartment.id);
+      setSuccess("Compartment deleted successfully");
+      setShowDeleteDialog(false);
       if (selectedCompartment?.id === deletingCompartment.id) {
-        setSelectedCompartment(null)
+        setSelectedCompartment(null);
       }
-      await loadCompartments()
+      await loadCompartments();
     } catch (err: unknown) {
-      const error = err as { response?: { data?: { detail?: string } } }
-      setError(error.response?.data?.detail || 'Failed to delete compartment')
+      const error = err as { response?: { data?: { detail?: string } } };
+      setError(error.response?.data?.detail || "Failed to delete compartment");
     } finally {
-      setIsDeleting(false)
+      setIsDeleting(false);
     }
-  }
+  };
 
   const handleAddMember = async () => {
     if (!memberEmail || !selectedCompartment) {
-      setError('Email is required')
-      return
+      setError("Email is required");
+      return;
     }
 
-    setIsAddingMember(true)
-    setError('')
-    setSuccess('')
-    setMemberNotRegistered(false)
+    setIsAddingMember(true);
+    setError("");
+    setSuccess("");
+    setMemberNotRegistered(false);
 
     try {
-      await apiClient.addCompartmentMember(selectedCompartment.id, { user_email: memberEmail, role: memberRole })
-      setSuccess('Member added successfully')
-      setShowMemberDialog(false)
-      setMemberEmail('')
-      setMemberRole('analyst')
-      await loadMembers(selectedCompartment.id)
+      await apiClient.addCompartmentMember(selectedCompartment.id, {
+        user_email: memberEmail,
+        role: memberRole,
+      });
+      setSuccess("Member added successfully");
+      setShowMemberDialog(false);
+      setMemberEmail("");
+      setMemberRole("analyst");
+      await loadMembers(selectedCompartment.id);
     } catch (err: unknown) {
-      const error = err as { response?: { data?: { detail?: string; message?: string } }; message?: string }
-      const detail = error.response?.data?.detail || error.response?.data?.message || error.message || ''
+      const error = err as {
+        response?: { data?: { detail?: string; message?: string } };
+        message?: string;
+      };
+      const detail =
+        error.response?.data?.detail ||
+        error.response?.data?.message ||
+        error.message ||
+        "";
       // User not found = not registered
-      if (detail.toLowerCase().includes('not found') || detail.toLowerCase().includes('user') || (error as { response?: { status?: number } }).response?.status === 404) {
-        setMemberNotRegistered(true)
+      if (
+        detail.toLowerCase().includes("not found") ||
+        detail.toLowerCase().includes("user") ||
+        (error as { response?: { status?: number } }).response?.status === 404
+      ) {
+        setMemberNotRegistered(true);
       } else {
-        setError(detail || 'Failed to add member')
+        setError(detail || "Failed to add member");
       }
     } finally {
-      setIsAddingMember(false)
+      setIsAddingMember(false);
     }
-  }
+  };
 
   const handleRemoveMember = async (memberId: string) => {
-    if (!selectedCompartment) return
+    if (!selectedCompartment) return;
 
     try {
-      await apiClient.removeCompartmentMember(selectedCompartment.id, memberId)
-      setSuccess('Member removed successfully')
-      await loadMembers(selectedCompartment.id)
+      await apiClient.removeCompartmentMember(selectedCompartment.id, memberId);
+      setSuccess("Member removed successfully");
+      await loadMembers(selectedCompartment.id);
     } catch (err: unknown) {
-      const error = err as { response?: { data?: { detail?: string } } }
-      setError(error.response?.data?.detail || 'Failed to remove member')
+      const error = err as { response?: { data?: { detail?: string } } };
+      setError(error.response?.data?.detail || "Failed to remove member");
     }
-  }
+  };
 
   if (!isOwnerOrAdmin) {
     return (
@@ -372,12 +405,13 @@ export default function CompartmentsPage() {
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              You do not have permission to view compartments. Only owners and administrators can access this page.
+              You do not have permission to view compartments. Only owners and
+              administrators can access this page.
             </AlertDescription>
           </Alert>
         </div>
       </MainLayout>
-    )
+    );
   }
 
   if (isLoading) {
@@ -387,7 +421,7 @@ export default function CompartmentsPage() {
           <Loader2 className="h-8 w-8 animate-spin" />
         </div>
       </MainLayout>
-    )
+    );
   }
 
   return (
@@ -469,23 +503,37 @@ export default function CompartmentsPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div>
-                    <Label className="text-sm text-muted-foreground">Name</Label>
+                    <Label className="text-sm text-muted-foreground">
+                      Name
+                    </Label>
                     <p className="font-medium">{selectedCompartment.name}</p>
                   </div>
                   {selectedCompartment.description && (
                     <div>
-                      <Label className="text-sm text-muted-foreground">Description</Label>
+                      <Label className="text-sm text-muted-foreground">
+                        Description
+                      </Label>
                       <p>{selectedCompartment.description}</p>
                     </div>
                   )}
                   <div>
-                    <Label className="text-sm text-muted-foreground">Path</Label>
-                    <p className="font-mono text-sm">{selectedCompartment.path}</p>
+                    <Label className="text-sm text-muted-foreground">
+                      Path
+                    </Label>
+                    <p className="font-mono text-sm">
+                      {selectedCompartment.path}
+                    </p>
                   </div>
                   <div>
-                    <Label className="text-sm text-muted-foreground">Status</Label>
-                    <Badge variant={selectedCompartment.is_active ? 'default' : 'secondary'}>
-                      {selectedCompartment.is_active ? 'Active' : 'Inactive'}
+                    <Label className="text-sm text-muted-foreground">
+                      Status
+                    </Label>
+                    <Badge
+                      variant={
+                        selectedCompartment.is_active ? "default" : "secondary"
+                      }
+                    >
+                      {selectedCompartment.is_active ? "Active" : "Inactive"}
                     </Badge>
                   </div>
                 </CardContent>
@@ -503,10 +551,7 @@ export default function CompartmentsPage() {
                         Users with access to this compartment
                       </CardDescription>
                     </div>
-                    <Button
-                      size="sm"
-                      onClick={() => setShowMemberDialog(true)}
-                    >
+                    <Button size="sm" onClick={() => setShowMemberDialog(true)}>
                       <UserPlus className="mr-2 h-4 w-4" />
                       Add Member
                     </Button>
@@ -531,7 +576,9 @@ export default function CompartmentsPage() {
                           <TableRow key={member.id}>
                             <TableCell>
                               <div>
-                                <div className="font-medium">{member.user_name}</div>
+                                <div className="font-medium">
+                                  {member.user_name}
+                                </div>
                                 <div className="text-sm text-muted-foreground">
                                   {member.user_email}
                                 </div>
@@ -563,17 +610,21 @@ export default function CompartmentsPage() {
         </div>
 
         {/* Create/Edit Compartment Dialog */}
-        <Dialog open={showCompartmentDialog} onOpenChange={setShowCompartmentDialog}>
+        <Dialog
+          open={showCompartmentDialog}
+          onOpenChange={setShowCompartmentDialog}
+        >
           <DialogContent>
             <DialogHeader>
               <DialogTitle>
-                {isEditMode ? 'Edit Compartment' : 'Create Compartment'}
+                {isEditMode ? "Edit Compartment" : "Create Compartment"}
               </DialogTitle>
               <DialogDescription>
                 {(() => {
-                  if (isEditMode) return 'Update compartment information';
-                  if (parentCompartment) return `Create a new sub-compartment under ${parentCompartment.name}`;
-                  return 'Create a new root compartment';
+                  if (isEditMode) return "Update compartment information";
+                  if (parentCompartment)
+                    return `Create a new sub-compartment under ${parentCompartment.name}`;
+                  return "Create a new root compartment";
                 })()}
               </DialogDescription>
             </DialogHeader>
@@ -620,7 +671,7 @@ export default function CompartmentsPage() {
               </Button>
               <Button onClick={handleSaveCompartment} disabled={isSaving}>
                 {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {isEditMode ? 'Update' : 'Create'}
+                {isEditMode ? "Update" : "Create"}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -632,19 +683,24 @@ export default function CompartmentsPage() {
             <AlertDialogHeader>
               <AlertDialogTitle>Delete Compartment</AlertDialogTitle>
               <AlertDialogDescription>
-                Are you sure you want to delete <strong>{deletingCompartment?.name}</strong>?
-                This will also delete all sub-compartments and remove resource assignments.
+                Are you sure you want to delete{" "}
+                <strong>{deletingCompartment?.name}</strong>? This will also
+                delete all sub-compartments and remove resource assignments.
                 This action cannot be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+              <AlertDialogCancel disabled={isDeleting}>
+                Cancel
+              </AlertDialogCancel>
               <AlertDialogAction
                 onClick={handleConfirmDelete}
                 disabled={isDeleting}
                 className="bg-red-500 hover:bg-red-600"
               >
-                {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isDeleting && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
                 Delete
               </AlertDialogAction>
             </AlertDialogFooter>
@@ -652,10 +708,17 @@ export default function CompartmentsPage() {
         </AlertDialog>
 
         {/* Add Member Dialog */}
-        <Dialog open={showMemberDialog} onOpenChange={(open) => {
-          setShowMemberDialog(open)
-          if (!open) { setMemberEmail(''); setMemberRole('analyst'); setMemberNotRegistered(false) }
-        }}>
+        <Dialog
+          open={showMemberDialog}
+          onOpenChange={(open) => {
+            setShowMemberDialog(open);
+            if (!open) {
+              setMemberEmail("");
+              setMemberRole("analyst");
+              setMemberNotRegistered(false);
+            }
+          }}
+        >
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Add Member to Compartment</DialogTitle>
@@ -680,8 +743,13 @@ export default function CompartmentsPage() {
                 <Alert className="border-amber-300 bg-amber-50 text-amber-900">
                   <AlertCircle className="h-4 w-4 text-amber-600" />
                   <AlertDescription className="space-y-2">
-                    <p><strong>{memberEmail}</strong> is not registered on this platform.</p>
-                    <p className="text-sm">Share the registration link with them:</p>
+                    <p>
+                      <strong>{memberEmail}</strong> is not registered on this
+                      platform.
+                    </p>
+                    <p className="text-sm">
+                      Share the registration link with them:
+                    </p>
                     <div className="flex items-center gap-2 p-2 bg-white rounded border text-xs font-mono break-all">
                       {registrationLink}
                       <Button
@@ -689,8 +757,8 @@ export default function CompartmentsPage() {
                         size="icon"
                         className="h-6 w-6 shrink-0"
                         onClick={() => {
-                          navigator.clipboard.writeText(registrationLink)
-                          setSuccess('Registration link copied!')
+                          navigator.clipboard.writeText(registrationLink);
+                          setSuccess("Registration link copied!");
                         }}
                       >
                         <Link className="h-3 w-3" />
@@ -703,7 +771,10 @@ export default function CompartmentsPage() {
               {!memberNotRegistered && (
                 <div className="space-y-2">
                   <Label htmlFor="member-role">Role</Label>
-                  <Select value={memberRole} onValueChange={(value: UserRole) => setMemberRole(value)}>
+                  <Select
+                    value={memberRole}
+                    onValueChange={(value: UserRole) => setMemberRole(value)}
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -722,10 +793,10 @@ export default function CompartmentsPage() {
               <Button
                 variant="outline"
                 onClick={() => {
-                  setShowMemberDialog(false)
-                  setMemberEmail('')
-                  setMemberRole('analyst')
-                  setMemberNotRegistered(false)
+                  setShowMemberDialog(false);
+                  setMemberEmail("");
+                  setMemberRole("analyst");
+                  setMemberNotRegistered(false);
                 }}
                 disabled={isAddingMember}
               >
@@ -733,7 +804,9 @@ export default function CompartmentsPage() {
               </Button>
               {!memberNotRegistered && (
                 <Button onClick={handleAddMember} disabled={isAddingMember}>
-                  {isAddingMember && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {isAddingMember && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
                   Add Member
                 </Button>
               )}
@@ -742,5 +815,5 @@ export default function CompartmentsPage() {
         </Dialog>
       </div>
     </MainLayout>
-  )
+  );
 }
