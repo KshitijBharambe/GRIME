@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { MainLayout } from "@/components/layout/main-layout";
 import apiClient from "@/lib/api";
+import { useAuthenticatedApi } from "@/lib/hooks/useAuthenticatedApi";
 import {
   Card,
   CardContent,
@@ -47,6 +48,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import type { Dataset, DatasetVersion } from "@/types/api";
 
 interface MLModel {
   id: string;
@@ -72,20 +74,23 @@ interface AnomalyScore {
   created_at: string;
 }
 
-interface Dataset {
-  id: string;
-  name: string;
-  status: string;
-}
+function getHttpStatus(error: unknown): number | undefined {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "response" in error &&
+    typeof (error as { response?: { status?: unknown } }).response === "object"
+  ) {
+    const status = (error as { response?: { status?: unknown } }).response
+      ?.status;
+    return typeof status === "number" ? status : undefined;
+  }
 
-interface DatasetVersion {
-  id: string;
-  dataset_id: string;
-  version_no: number;
-  created_at: string;
+  return undefined;
 }
 
 export default function MLModelsPage() {
+  const { hasToken } = useAuthenticatedApi();
   const [models, setModels] = useState<MLModel[]>([]);
   const [anomalyScores] = useState<AnomalyScore[]>([]);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
@@ -104,6 +109,10 @@ export default function MLModelsPage() {
       const data = response.data as { models: MLModel[] };
       setModels(data.models || []);
     } catch (error) {
+      if (getHttpStatus(error) === 404) {
+        setModels([]);
+        return;
+      }
       console.error("Error fetching ML models:", error);
       toast.error("Failed to fetch ML models");
     }
@@ -125,6 +134,11 @@ export default function MLModelsPage() {
       const response = await apiClient.getDatasetVersions(datasetId);
       setDatasetVersions(response || []);
     } catch (error) {
+      if (getHttpStatus(error) === 404) {
+        setDatasetVersions([]);
+        toast.info("Dataset versions are unavailable in this environment");
+        return;
+      }
       console.error("Error fetching dataset versions:", error);
     }
   };
@@ -141,7 +155,7 @@ export default function MLModelsPage() {
       setTrainingInProgress(true);
       const response = await apiClient.post(
         "/advanced/ml-models/train",
-        trainingData
+        trainingData,
       );
       const data = response.data as { task_id: string };
       toast.success(`Model training started: ${data.task_id}`);
@@ -183,13 +197,14 @@ export default function MLModelsPage() {
   };
 
   useEffect(() => {
+    if (!hasToken) return;
     const loadData = async () => {
       setLoading(true);
       await Promise.all([fetchModels(), fetchDatasets()]);
       setLoading(false);
     };
     loadData();
-  }, []);
+  }, [hasToken]);
 
   useEffect(() => {
     if (selectedDataset) {
@@ -320,7 +335,7 @@ export default function MLModelsPage() {
                         </div>
                         <Badge
                           className={`${getStatusColor(
-                            model.is_active
+                            model.is_active,
                           )} text-white`}
                           variant="outline"
                         >
@@ -370,7 +385,7 @@ export default function MLModelsPage() {
                                   </span>
                                   <span>
                                     {String(
-                                      model.training_metrics.total_samples
+                                      model.training_metrics.total_samples,
                                     )}
                                   </span>
                                 </div>
@@ -383,7 +398,7 @@ export default function MLModelsPage() {
                                   </span>
                                   <span>
                                     {String(
-                                      model.training_metrics.feature_count
+                                      model.training_metrics.feature_count,
                                     )}
                                   </span>
                                 </div>
@@ -527,7 +542,7 @@ export default function MLModelsPage() {
                           <Badge
                             className={`${getScoreColor(
                               score.anomaly_score,
-                              score.threshold_used
+                              score.threshold_used,
                             )} text-white`}
                           >
                             {score.anomaly_score.toFixed(2)}% anomaly
@@ -626,7 +641,7 @@ export default function MLModelsPage() {
                     <Label>Status</Label>
                     <div
                       className={`mt-1 px-3 py-2 rounded-md text-center text-white font-medium ${getStatusColor(
-                        selectedModel.is_active
+                        selectedModel.is_active,
                       )}`}
                     >
                       {selectedModel.is_active ? "Active" : "Inactive"}
@@ -679,7 +694,7 @@ export default function MLModelsPage() {
                           {JSON.stringify(
                             selectedModel.training_metrics,
                             null,
-                            2
+                            2,
                           )}
                         </pre>
                       </div>
@@ -695,7 +710,7 @@ export default function MLModelsPage() {
                           {JSON.stringify(
                             selectedModel.model_metadata,
                             null,
-                            2
+                            2,
                           )}
                         </pre>
                       </div>
@@ -820,8 +835,8 @@ export default function MLModelsPage() {
                           !selectedDataset
                             ? "Select dataset first"
                             : datasetVersions.length === 0
-                            ? "No versions available"
-                            : "Select version"
+                              ? "No versions available"
+                              : "Select version"
                         }
                       />
                     </SelectTrigger>

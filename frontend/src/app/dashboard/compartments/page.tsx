@@ -54,80 +54,22 @@ import {
   ChevronDown,
   Folder,
   UserPlus,
-  X
+  X,
+  Link,
 } from 'lucide-react'
 import { MainLayout } from '@/components/layout/main-layout'
+import { useAuthenticatedApi } from '@/lib/hooks/useAuthenticatedApi'
+import apiClient from '@/lib/api'
 import { Compartment, CompartmentMember, UserRole } from '@/types/api'
 
-// Mock API calls - replace with actual API client calls
-const mockGetCompartments = async (): Promise<Compartment[]> => {
-  return [
-    {
-      id: '1',
-      name: 'Root',
-      description: 'Root compartment',
-      organization_id: 'org1',
-      path: '/root',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      created_by: 'user1',
-      is_active: true,
-      children: [
-        {
-          id: '2',
-          name: 'Engineering',
-          description: 'Engineering team',
-          organization_id: 'org1',
-          parent_compartment_id: '1',
-          path: '/root/engineering',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          created_by: 'user1',
-          is_active: true,
-          children: [
-            {
-              id: '3',
-              name: 'Backend',
-              organization_id: 'org1',
-              parent_compartment_id: '2',
-              path: '/root/engineering/backend',
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-              created_by: 'user1',
-              is_active: true,
-            },
-          ],
-        },
-      ],
-    },
-  ]
-}
-
-const mockGetCompartmentMembers = async (id: string): Promise<CompartmentMember[]> => {
-  return [
-    {
-      id: '1',
-      compartment_id: id,
-      user_id: 'user1',
-      user_name: 'John Doe',
-      user_email: 'john@example.com',
-      role: 'analyst',
-      inherit_from_parent: true,
-      added_at: new Date().toISOString(),
-      added_by: 'admin1',
-      is_active: true,
-    },
-  ]
-}
-
 interface CompartmentTreeItemProps {
-  compartment: Compartment
-  level: number
+  readonly compartment: Compartment
+  readonly level: number
   onSelect: (compartment: Compartment) => void
   onEdit: (compartment: Compartment) => void
   onDelete: (compartment: Compartment) => void
   onAddChild: (parent: Compartment) => void
-  selected?: string
+  readonly selected?: string
 }
 
 function CompartmentTreeItem({
@@ -231,6 +173,7 @@ function CompartmentTreeItem({
 
 export default function CompartmentsPage() {
   const { data: session } = useSession()
+  const { hasToken } = useAuthenticatedApi()
   const [compartments, setCompartments] = useState<Compartment[]>([])
   const [selectedCompartment, setSelectedCompartment] = useState<Compartment | null>(null)
   const [members, setMembers] = useState<CompartmentMember[]>([])
@@ -252,30 +195,36 @@ export default function CompartmentsPage() {
   const [deletingCompartment, setDeletingCompartment] = useState<Compartment | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
-  // Add member dialog state
+  // Add member dialog state — with invite verification
   const [showMemberDialog, setShowMemberDialog] = useState(false)
   const [memberEmail, setMemberEmail] = useState('')
   const [memberRole, setMemberRole] = useState<UserRole>('analyst')
   const [isAddingMember, setIsAddingMember] = useState(false)
+  const [memberNotRegistered, setMemberNotRegistered] = useState(false)
+  const [registrationLink] = useState(`${typeof window !== 'undefined' ? window.location.origin : ''}/auth/register`)
 
   const isOwnerOrAdmin = session?.user?.role === 'owner' || session?.user?.role === 'admin'
 
   useEffect(() => {
-    loadCompartments()
-  }, [])
+    if (hasToken) loadCompartments()
+  }, [hasToken])
 
   useEffect(() => {
-    if (selectedCompartment) {
+    if (selectedCompartment && hasToken) {
       loadMembers(selectedCompartment.id)
     }
-  }, [selectedCompartment])
+  }, [selectedCompartment, hasToken])
+
+  // Reset unregistered warning when email changes
+  useEffect(() => {
+    setMemberNotRegistered(false)
+  }, [memberEmail])
 
   const loadCompartments = async () => {
     setIsLoading(true)
     setError('')
     try {
-      // Replace with: const data = await apiClient.getCompartments()
-      const data = await mockGetCompartments()
+      const data = await apiClient.getCompartments()
       setCompartments(data)
       if (data.length > 0 && !selectedCompartment) {
         setSelectedCompartment(data[0])
@@ -290,8 +239,7 @@ export default function CompartmentsPage() {
 
   const loadMembers = async (compartmentId: string) => {
     try {
-      // Replace with: const data = await apiClient.getCompartmentMembers(compartmentId)
-      const data = await mockGetCompartmentMembers(compartmentId)
+      const data = await apiClient.getCompartmentMembers(compartmentId)
       setMembers(data)
     } catch (err: unknown) {
       const error = err as { response?: { data?: { detail?: string } } }
@@ -333,12 +281,10 @@ export default function CompartmentsPage() {
 
     try {
       if (isEditMode && editingCompartment) {
-        // Replace with: await apiClient.updateCompartment(editingCompartment.id, { name: compartmentName, description: compartmentDescription })
-        await new Promise(resolve => setTimeout(resolve, 1000))
+        await apiClient.updateCompartment(editingCompartment.id, { name: compartmentName, description: compartmentDescription })
         setSuccess('Compartment updated successfully')
       } else {
-        // Replace with: await apiClient.createCompartment({ name: compartmentName, description: compartmentDescription, parent_compartment_id: parentCompartment?.id })
-        await new Promise(resolve => setTimeout(resolve, 1000))
+        await apiClient.createCompartment({ name: compartmentName, description: compartmentDescription, parent_compartment_id: parentCompartment?.id })
         setSuccess('Compartment created successfully')
       }
       setShowCompartmentDialog(false)
@@ -359,8 +305,7 @@ export default function CompartmentsPage() {
     setSuccess('')
 
     try {
-      // Replace with: await apiClient.deleteCompartment(deletingCompartment.id)
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      await apiClient.deleteCompartment(deletingCompartment.id)
       setSuccess('Compartment deleted successfully')
       setShowDeleteDialog(false)
       if (selectedCompartment?.id === deletingCompartment.id) {
@@ -384,18 +329,24 @@ export default function CompartmentsPage() {
     setIsAddingMember(true)
     setError('')
     setSuccess('')
+    setMemberNotRegistered(false)
 
     try {
-      // Replace with: await apiClient.addCompartmentMember(selectedCompartment.id, { user_email: memberEmail, role: memberRole })
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      await apiClient.addCompartmentMember(selectedCompartment.id, { user_email: memberEmail, role: memberRole })
       setSuccess('Member added successfully')
       setShowMemberDialog(false)
       setMemberEmail('')
       setMemberRole('analyst')
       await loadMembers(selectedCompartment.id)
     } catch (err: unknown) {
-      const error = err as { response?: { data?: { detail?: string } } }
-      setError(error.response?.data?.detail || 'Failed to add member')
+      const error = err as { response?: { data?: { detail?: string; message?: string } }; message?: string }
+      const detail = error.response?.data?.detail || error.response?.data?.message || error.message || ''
+      // User not found = not registered
+      if (detail.toLowerCase().includes('not found') || detail.toLowerCase().includes('user') || (error as { response?: { status?: number } }).response?.status === 404) {
+        setMemberNotRegistered(true)
+      } else {
+        setError(detail || 'Failed to add member')
+      }
     } finally {
       setIsAddingMember(false)
     }
@@ -405,8 +356,7 @@ export default function CompartmentsPage() {
     if (!selectedCompartment) return
 
     try {
-      // Replace with: await apiClient.removeCompartmentMember(selectedCompartment.id, memberId)
-      await new Promise(resolve => setTimeout(resolve, 500))
+      await apiClient.removeCompartmentMember(selectedCompartment.id, memberId)
       setSuccess('Member removed successfully')
       await loadMembers(selectedCompartment.id)
     } catch (err: unknown) {
@@ -620,11 +570,11 @@ export default function CompartmentsPage() {
                 {isEditMode ? 'Edit Compartment' : 'Create Compartment'}
               </DialogTitle>
               <DialogDescription>
-                {isEditMode
-                  ? 'Update compartment information'
-                  : parentCompartment
-                  ? `Create a new sub-compartment under ${parentCompartment.name}`
-                  : 'Create a new root compartment'}
+                {(() => {
+                  if (isEditMode) return 'Update compartment information';
+                  if (parentCompartment) return `Create a new sub-compartment under ${parentCompartment.name}`;
+                  return 'Create a new root compartment';
+                })()}
               </DialogDescription>
             </DialogHeader>
 
@@ -702,7 +652,10 @@ export default function CompartmentsPage() {
         </AlertDialog>
 
         {/* Add Member Dialog */}
-        <Dialog open={showMemberDialog} onOpenChange={setShowMemberDialog}>
+        <Dialog open={showMemberDialog} onOpenChange={(open) => {
+          setShowMemberDialog(open)
+          if (!open) { setMemberEmail(''); setMemberRole('analyst'); setMemberNotRegistered(false) }
+        }}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Add Member to Compartment</DialogTitle>
@@ -723,20 +676,46 @@ export default function CompartmentsPage() {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="member-role">Role</Label>
-                <Select value={memberRole} onValueChange={(value: UserRole) => setMemberRole(value)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="owner">Owner</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
-                    <SelectItem value="analyst">Analyst</SelectItem>
-                    <SelectItem value="viewer">Viewer</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              {memberNotRegistered && (
+                <Alert className="border-amber-300 bg-amber-50 text-amber-900">
+                  <AlertCircle className="h-4 w-4 text-amber-600" />
+                  <AlertDescription className="space-y-2">
+                    <p><strong>{memberEmail}</strong> is not registered on this platform.</p>
+                    <p className="text-sm">Share the registration link with them:</p>
+                    <div className="flex items-center gap-2 p-2 bg-white rounded border text-xs font-mono break-all">
+                      {registrationLink}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 shrink-0"
+                        onClick={() => {
+                          navigator.clipboard.writeText(registrationLink)
+                          setSuccess('Registration link copied!')
+                        }}
+                      >
+                        <Link className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {!memberNotRegistered && (
+                <div className="space-y-2">
+                  <Label htmlFor="member-role">Role</Label>
+                  <Select value={memberRole} onValueChange={(value: UserRole) => setMemberRole(value)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="owner">Owner</SelectItem>
+                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="analyst">Analyst</SelectItem>
+                      <SelectItem value="viewer">Viewer</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
 
             <DialogFooter>
@@ -746,15 +725,18 @@ export default function CompartmentsPage() {
                   setShowMemberDialog(false)
                   setMemberEmail('')
                   setMemberRole('analyst')
+                  setMemberNotRegistered(false)
                 }}
                 disabled={isAddingMember}
               >
                 Cancel
               </Button>
-              <Button onClick={handleAddMember} disabled={isAddingMember}>
-                {isAddingMember && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Add Member
-              </Button>
+              {!memberNotRegistered && (
+                <Button onClick={handleAddMember} disabled={isAddingMember}>
+                  {isAddingMember && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Add Member
+                </Button>
+              )}
             </DialogFooter>
           </DialogContent>
         </Dialog>

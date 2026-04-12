@@ -1,11 +1,10 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, func, String
+from sqlalchemy import or_, String
 from typing import List, Dict, Any
 from app.database import get_session
-from app.models import Dataset, Rule, Execution, Issue, User, DatasetVersion
-from app.auth import get_any_authenticated_user, get_any_org_member_context, OrgContext
-from app.middleware.organization import OrganizationFilter
+from app.models import Dataset, Rule, Execution, Issue, DatasetVersion
+from app.auth import get_any_org_member_context, OrgContext
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/search", tags=["search"])

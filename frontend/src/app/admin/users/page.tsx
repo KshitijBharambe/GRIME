@@ -81,7 +81,7 @@ const roleLabels: Record<UserRole, string> = {
 }
 
 interface CreateUserDialogProps {
-  open: boolean
+  readonly open: boolean
   onOpenChange: (open: boolean) => void
 }
 
@@ -203,8 +203,8 @@ function CreateUserDialog({ open, onOpenChange }: CreateUserDialogProps) {
 }
 
 interface UserActionsDropdownProps {
-  user: User
-  currentUserId: string
+  readonly user: User
+  readonly currentUserId: string
 }
 
 function UserActionsDropdown({ user, currentUserId }: UserActionsDropdownProps) {

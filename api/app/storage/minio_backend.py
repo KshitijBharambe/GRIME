@@ -6,7 +6,6 @@ Uses MinIO (S3-compatible) for local development and testing.
 
 import logging
 from typing import List, Optional
-from datetime import timedelta
 
 import boto3
 from botocore.client import Config

@@ -62,6 +62,7 @@ output "vpc_connector_id" {
 output "secret_names" {
   description = "List of created secret names"
   value       = module.secret_manager.secret_names
+  sensitive   = true
 }
 
 # Service Account Output

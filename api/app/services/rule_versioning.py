@@ -1,14 +1,12 @@
 """
 Rule versioning helper functions and endpoints
 """
-from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
-from typing import Dict, Any
 import json
 
-from app.models import Rule, Execution, User
-from app.schemas import RuleUpdate, RuleResponse
+from app.models import Rule, User
+from app.schemas import RuleUpdate
 
 
 async def create_rule_version(

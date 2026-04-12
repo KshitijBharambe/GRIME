@@ -55,7 +55,9 @@ def get_storage(
         if storage_type == "gcs":
             # Google Cloud Storage
             if project_id is None:
-                project_id = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT_ID")
+                project_id = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv(
+                    "GCP_PROJECT_ID"
+                )
 
             return GCSStorage(project_id=project_id)
 
@@ -64,11 +66,16 @@ def get_storage(
             if endpoint_url is None:
                 endpoint_url = os.getenv("STORAGE_ENDPOINT", "http://localhost:9000")
             if access_key is None:
-                access_key = os.getenv("STORAGE_ACCESS_KEY", "minioadmin")
+                access_key = os.getenv("STORAGE_ACCESS_KEY")
             if secret_key is None:
-                secret_key = os.getenv("STORAGE_SECRET_KEY", "minioadmin")
+                secret_key = os.getenv("STORAGE_SECRET_KEY")
             if region is None:
                 region = os.getenv("STORAGE_REGION", "us-east-1")
+
+            if not access_key or not secret_key:
+                raise ValueError(
+                    "MinIO credentials must be provided via STORAGE_ACCESS_KEY and STORAGE_SECRET_KEY"
+                )
 
             # Check for SSL configuration
             if os.getenv("STORAGE_USE_SSL", "").lower() in ("true", "1", "yes"):

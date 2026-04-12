@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { MainLayout } from "@/components/layout/main-layout";
+import apiClient from "@/lib/api";
+import { useAuthenticatedApi } from "@/lib/hooks/useAuthenticatedApi";
 import {
   Card,
   CardContent,
@@ -63,7 +65,23 @@ interface Dataset {
   status: string;
 }
 
+function getHttpStatus(error: unknown): number | undefined {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "response" in error &&
+    typeof (error as { response?: { status?: unknown } }).response === "object"
+  ) {
+    const status = (error as { response?: { status?: unknown } }).response
+      ?.status;
+    return typeof status === "number" ? status : undefined;
+  }
+
+  return undefined;
+}
+
 export default function TemplatesPage() {
+  const { hasToken } = useAuthenticatedApi();
   const [templates, setTemplates] = useState<RuleTemplate[]>([]);
   const [suggestions, setSuggestions] = useState<RuleSuggestion[]>([]);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
@@ -73,22 +91,25 @@ export default function TemplatesPage() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isApplyDialogOpen, setIsApplyDialogOpen] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<RuleTemplate | null>(
-    null
+    null,
   );
   const [selectedDataset, setSelectedDataset] = useState<string>("");
 
   // Fetch templates
   const fetchTemplates = useCallback(async () => {
     try {
-      const params = new URLSearchParams();
-      if (selectedCategory) params.append("category", selectedCategory);
-      if (selectedKind) params.append("kind", selectedKind);
+      const params: Record<string, string> = {};
+      if (selectedCategory) params.category = selectedCategory;
+      if (selectedKind) params.kind = selectedKind;
 
-      const response = await fetch(`/api/advanced/templates?${params}`);
-      if (!response.ok) throw new Error("Failed to fetch templates");
-      const data = await response.json();
+      const response = await apiClient.get("/advanced/templates", { params });
+      const data = response.data as { templates: RuleTemplate[] };
       setTemplates(data.templates || []);
     } catch (error) {
+      if (getHttpStatus(error) === 404) {
+        setTemplates([]);
+        return;
+      }
       console.error("Error fetching templates:", error);
       toast.error("Failed to fetch templates");
     }
@@ -97,10 +118,8 @@ export default function TemplatesPage() {
   // Fetch datasets
   const fetchDatasets = async () => {
     try {
-      const response = await fetch("/api/datasets");
-      if (!response.ok) throw new Error("Failed to fetch datasets");
-      const data = await response.json();
-      setDatasets(data.datasets || []);
+      const response = await apiClient.getDatasets();
+      setDatasets(response.items || []);
     } catch (error) {
       console.error("Error fetching datasets:", error);
     }
@@ -109,13 +128,17 @@ export default function TemplatesPage() {
   // Fetch suggestions for a dataset
   const fetchSuggestions = async (datasetId: string) => {
     try {
-      const response = await fetch(
-        `/api/advanced/datasets/${datasetId}/suggestions`
+      const response = await apiClient.get(
+        `/advanced/datasets/${datasetId}/suggestions`,
       );
-      if (!response.ok) throw new Error("Failed to fetch suggestions");
-      const data = await response.json();
+      const data = response.data as { suggestions: RuleSuggestion[] };
       setSuggestions(data.suggestions || []);
     } catch (error) {
+      if (getHttpStatus(error) === 404) {
+        setSuggestions([]);
+        toast.info("Suggestions are unavailable in this environment");
+        return;
+      }
       console.error("Error fetching suggestions:", error);
       toast.error("Failed to fetch suggestions");
     }
@@ -124,25 +147,18 @@ export default function TemplatesPage() {
   // Apply template
   const applyTemplate = async (
     templateId: string,
-    customizations: Record<string, unknown>
+    customizations: Record<string, unknown>,
   ) => {
     try {
-      const response = await fetch(
-        `/api/advanced/templates/${templateId}/apply`,
+      const response = await apiClient.post(
+        `/advanced/templates/${templateId}/apply`,
         {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            dataset_id: selectedDataset,
-            customizations,
-            rule_name: `${templateId} - ${selectedDataset}`,
-          }),
-        }
+          dataset_id: selectedDataset,
+          customizations,
+          rule_name: `${selectedTemplate?.name ?? templateId} - ${selectedDataset}`,
+        },
       );
-
-      if (!response.ok) throw new Error("Failed to apply template");
-
-      const data = await response.json();
+      const data = response.data as { rule_name: string };
       toast.success(`Rule "${data.rule_name}" created successfully`);
 
       setIsApplyDialogOpen(false);
@@ -156,17 +172,8 @@ export default function TemplatesPage() {
   // Mark suggestion as applied
   const markSuggestionApplied = async (suggestionId: string) => {
     try {
-      const response = await fetch(
-        `/api/advanced/suggestions/${suggestionId}/apply`,
-        {
-          method: "POST",
-        }
-      );
-
-      if (!response.ok) throw new Error("Failed to mark suggestion as applied");
-
+      await apiClient.post(`/advanced/suggestions/${suggestionId}/apply`);
       toast.success("Suggestion marked as applied");
-
       fetchSuggestions(selectedDataset);
     } catch (error) {
       console.error("Error marking suggestion applied:", error);
@@ -175,6 +182,7 @@ export default function TemplatesPage() {
   };
 
   useEffect(() => {
+    if (!hasToken) return;
     const loadData = async () => {
       setLoading(true);
       await fetchTemplates();
@@ -182,7 +190,7 @@ export default function TemplatesPage() {
       setLoading(false);
     };
     loadData();
-  }, [selectedCategory, selectedKind, fetchTemplates]);
+  }, [hasToken, selectedCategory, selectedKind, fetchTemplates]);
 
   useEffect(() => {
     if (selectedDataset) {
@@ -382,7 +390,7 @@ export default function TemplatesPage() {
                           </h3>
                           <div
                             className={`px-2 py-1 rounded text-white text-xs ${getConfidenceColor(
-                              suggestion.confidence_score
+                              suggestion.confidence_score,
                             )}`}
                           >
                             {suggestion.confidence_score}% confidence
@@ -533,7 +541,7 @@ export default function TemplatesPage() {
                   <Button
                     onClick={() => {
                       const textareaElement = document.querySelector(
-                        'textarea[placeholder*="JSON"]'
+                        'textarea[placeholder*="JSON"]',
                       ) as HTMLTextAreaElement;
                       const customizationsText = textareaElement?.value;
                       const customizations = customizationsText

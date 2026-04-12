@@ -9,10 +9,8 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 
 from app.models import (
-    Dataset, DatasetVersion, Issue, Fix, User,
-    VersionSource, VersionJournal, Execution, DatasetColumn
+    Dataset, DatasetVersion, Issue, Fix, VersionSource, VersionJournal, Execution
 )
-from app.database import get_session
 
 
 class DatasetFixService:
@@ -124,8 +122,8 @@ class DatasetFixService:
             dataset_version_id=new_version.id,
             event="fixes_applied",
             rows_affected=len(applied_fixes),
-            columns_affected=len(set(fix.issue.column_name for fix in applied_fixes)),
-            details=f"Applied {len(applied_fixes)} fixes from {len(set(fix.issue_id for fix in applied_fixes))} issues"
+            columns_affected=len({fix.issue.column_name for fix in applied_fixes}),
+            details=f"Applied {len(applied_fixes)} fixes from {len({fix.issue_id for fix in applied_fixes})} issues"
         )
         self.db.add(journal_entry)
 

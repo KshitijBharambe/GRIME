@@ -169,7 +169,7 @@ variable "secrets" {
     value       = string
     description = string
   }))
-  sensitive = true
+  # Not marked as sensitive to allow for_each usage
   default   = {}
 }
 
@@ -177,6 +177,7 @@ variable "secrets" {
 variable "jwt_secret_key" {
   description = "JWT secret key for authentication"
   type        = string
+  # Sensitive to protect in logs/outputs
   sensitive   = true
 }
 
@@ -197,6 +198,14 @@ variable "cors_origins" {
   description = "List of allowed CORS origins"
   type        = list(string)
   default     = []
+}
+
+# Cloud Run Access Control
+variable "allow_unauthenticated" {
+  description = "Allow unauthenticated access to Cloud Run. Set to true only for public APIs that handle their own authentication (e.g., JWT). Defaults to false for security."
+  type        = bool
+  default     = false
+}
 }
 
 # Networking Configuration

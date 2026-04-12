@@ -5,13 +5,14 @@ Shows how to use the storage backend in a storage-agnostic way.
 """
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, Query
-from fastapi.responses import Response, StreamingResponse
-from typing import List
+from fastapi.responses import Response
 import logging
+from uuid import uuid4
 
 from ..storage import storage
 from ..storage.config import storage_settings
 from ..storage.base import StorageError
+from app.core.config import ErrorMessages
 
 logger = logging.getLogger(__name__)
 
@@ -27,17 +28,36 @@ async def upload_file(file: UploadFile = File(...)):
     or GCS (production) is configured - the abstraction layer handles it!
     """
     try:
-        # Read file data
-        data = await file.read()
+        max_bytes = storage_settings.max_file_size_bytes
 
-        # Check file size
-        file_size_mb = len(data) / (1024 * 1024)
-        if file_size_mb > storage_settings.max_file_size_bytes / (1024 * 1024):
+        # --- Validate size BEFORE reading full file into memory ---
+        # Fast path: Content-Length header
+        if file.size is not None and file.size > max_bytes:
             raise HTTPException(
                 status_code=413,
-                detail=f"File size ({file_size_mb:.2f}MB) exceeds maximum allowed size "
+                detail=f"File size exceeds maximum allowed size "
                 f"({storage_settings.storage_max_file_size_mb}MB)",
             )
+
+        # Streaming read with hard cap (defends against missing/spoofed header)
+        chunks: list[bytes] = []
+        total = 0
+        chunk_size = 256 * 1024  # 256 KB
+        while True:
+            chunk = await file.read(chunk_size)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > max_bytes:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"File size exceeds maximum allowed size "
+                    f"({storage_settings.storage_max_file_size_mb}MB)",
+                )
+            chunks.append(chunk)
+
+        data = b"".join(chunks)
+        file_size_mb = len(data) / (1024 * 1024)
 
         # Generate storage key
         file_key = f"uploads/{file.filename}"
@@ -67,11 +87,21 @@ async def upload_file(file: UploadFile = File(...)):
         }
 
     except StorageError as e:
-        logger.error(f"Storage error during upload: {e}")
-        raise HTTPException(status_code=500, detail=f"Storage error: {str(e)}")
+        error_id = str(uuid4())
+        logger.error(
+            f"Storage error during upload [ref={error_id}]: {e}", exc_info=True
+        )
+        raise HTTPException(
+            status_code=500, detail=f"Internal error. Reference: {error_id}"
+        )
     except Exception as e:
-        logger.error(f"Unexpected error during upload: {e}")
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+        error_id = str(uuid4())
+        logger.error(
+            f"Unexpected error during upload [ref={error_id}]: {e}", exc_info=True
+        )
+        raise HTTPException(
+            status_code=500, detail=f"Internal error. Reference: {error_id}"
+        )
 
 
 @router.get("/download/{file_key:path}")
@@ -85,7 +115,7 @@ async def download_file(file_key: str):
     try:
         # Check if file exists
         if not storage.file_exists(storage_settings.storage_bucket, file_key):
-            raise HTTPException(status_code=404, detail="File not found")
+            raise HTTPException(status_code=404, detail=ErrorMessages.FILE_NOT_FOUND)
 
         # Get file metadata
         metadata = storage.get_file_metadata(storage_settings.storage_bucket, file_key)
@@ -105,13 +135,23 @@ async def download_file(file_key: str):
         )
 
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="File not found")
+        raise HTTPException(status_code=404, detail=ErrorMessages.FILE_NOT_FOUND)
     except StorageError as e:
-        logger.error(f"Storage error during download: {e}")
-        raise HTTPException(status_code=500, detail=f"Storage error: {str(e)}")
+        error_id = str(uuid4())
+        logger.error(
+            f"Storage error during download [ref={error_id}]: {e}", exc_info=True
+        )
+        raise HTTPException(
+            status_code=500, detail=f"Internal error. Reference: {error_id}"
+        )
     except Exception as e:
-        logger.error(f"Unexpected error during download: {e}")
-        raise HTTPException(status_code=500, detail=f"Download failed: {str(e)}")
+        error_id = str(uuid4())
+        logger.error(
+            f"Unexpected error during download [ref={error_id}]: {e}", exc_info=True
+        )
+        raise HTTPException(
+            status_code=500, detail=f"Internal error. Reference: {error_id}"
+        )
 
 
 @router.get("/signed-url/{file_key:path}")
@@ -128,7 +168,7 @@ async def get_signed_url(
     try:
         # Check if file exists
         if not storage.file_exists(storage_settings.storage_bucket, file_key):
-            raise HTTPException(status_code=404, detail="File not found")
+            raise HTTPException(status_code=404, detail=ErrorMessages.FILE_NOT_FOUND)
 
         # Generate signed URL
         signed_url = storage.get_signed_url(
@@ -145,10 +185,15 @@ async def get_signed_url(
         }
 
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="File not found")
+        raise HTTPException(status_code=404, detail=ErrorMessages.FILE_NOT_FOUND)
     except StorageError as e:
-        logger.error(f"Storage error generating signed URL: {e}")
-        raise HTTPException(status_code=500, detail=f"Storage error: {str(e)}")
+        error_id = str(uuid4())
+        logger.error(
+            f"Storage error generating signed URL [ref={error_id}]: {e}", exc_info=True
+        )
+        raise HTTPException(
+            status_code=500, detail=f"Internal error. Reference: {error_id}"
+        )
 
 
 @router.get("/list")
@@ -165,7 +210,9 @@ async def list_files(
     """
     try:
         files = storage.list_files(
-            bucket=storage_settings.storage_bucket, prefix=prefix, max_results=max_results
+            bucket=storage_settings.storage_bucket,
+            prefix=prefix,
+            max_results=max_results,
         )
 
         logger.info(f"Listed {len(files)} files with prefix '{prefix}'")
@@ -179,8 +226,13 @@ async def list_files(
         }
 
     except StorageError as e:
-        logger.error(f"Storage error listing files: {e}")
-        raise HTTPException(status_code=500, detail=f"Storage error: {str(e)}")
+        error_id = str(uuid4())
+        logger.error(
+            f"Storage error listing files [ref={error_id}]: {e}", exc_info=True
+        )
+        raise HTTPException(
+            status_code=500, detail=f"Internal error. Reference: {error_id}"
+        )
 
 
 @router.delete("/delete/{file_key:path}")
@@ -196,7 +248,7 @@ async def delete_file(file_key: str):
         deleted = storage.delete_file(storage_settings.storage_bucket, file_key)
 
         if not deleted:
-            raise HTTPException(status_code=404, detail="File not found")
+            raise HTTPException(status_code=404, detail=ErrorMessages.FILE_NOT_FOUND)
 
         logger.info(f"Deleted file {file_key}")
 
@@ -207,8 +259,13 @@ async def delete_file(file_key: str):
         }
 
     except StorageError as e:
-        logger.error(f"Storage error during deletion: {e}")
-        raise HTTPException(status_code=500, detail=f"Storage error: {str(e)}")
+        error_id = str(uuid4())
+        logger.error(
+            f"Storage error during deletion [ref={error_id}]: {e}", exc_info=True
+        )
+        raise HTTPException(
+            status_code=500, detail=f"Internal error. Reference: {error_id}"
+        )
 
 
 @router.get("/metadata/{file_key:path}")
@@ -231,10 +288,15 @@ async def get_file_metadata(file_key: str):
         }
 
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="File not found")
+        raise HTTPException(status_code=404, detail=ErrorMessages.FILE_NOT_FOUND)
     except StorageError as e:
-        logger.error(f"Storage error retrieving metadata: {e}")
-        raise HTTPException(status_code=500, detail=f"Storage error: {str(e)}")
+        error_id = str(uuid4())
+        logger.error(
+            f"Storage error retrieving metadata [ref={error_id}]: {e}", exc_info=True
+        )
+        raise HTTPException(
+            status_code=500, detail=f"Internal error. Reference: {error_id}"
+        )
 
 
 @router.get("/health")
@@ -272,9 +334,8 @@ async def storage_health():
         }
 
     except Exception as e:
-        logger.error(f"Storage health check failed: {e}")
+        logger.error(f"Storage health check failed: {e}", exc_info=True)
         return {
             "status": "unhealthy",
             "storage_backend": storage_settings.storage_type,
-            "error": str(e),
         }

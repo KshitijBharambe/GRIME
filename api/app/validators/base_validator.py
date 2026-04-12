@@ -3,14 +3,13 @@ Enhanced base validator class to reduce code duplication and provide consistent 
 """
 
 import json
-import logging
 import pandas as pd
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional, Union, Set
+from typing import List, Dict, Any, Set
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 
-from app.models import Rule, RuleKind
+from app.models import Rule
 from app.utils import ChunkedDataFrameReader, MemoryMonitor
 from app.utils.logging_service import get_logger
 from .parameter_schemas import ParameterValidator
@@ -64,8 +63,8 @@ class ValidationResult:
             'issues_count': len(self.issues),
             'warnings_count': len(self.warnings),
             'errors_count': len(self.errors),
-            'rows_affected': len(set(issue.get('row_index') for issue in self.issues if 'row_index' in issue)),
-            'columns_affected': len(set(issue.get('column_name') for issue in self.issues if 'column_name' in issue)),
+            'rows_affected': len({issue.get('row_index') for issue in self.issues if 'row_index' in issue}),
+            'columns_affected': len({issue.get('column_name') for issue in self.issues if 'column_name' in issue}),
             'metadata': self.metadata
         }
 
@@ -132,14 +131,14 @@ class BaseValidator(ABC):
 
         except json.JSONDecodeError as e:
             self.logger.log_error(
-                f"Invalid JSON in rule parameters",
+                "Invalid JSON in rule parameters",
                 exception=e,
                 rule_id=getattr(self.rule, 'id', 'unknown')
             )
             raise ValidationError(f"Invalid JSON in rule parameters: {str(e)}")
         except Exception as e:
             self.logger.log_error(
-                f"Parameter validation failed",
+                "Parameter validation failed",
                 exception=e,
                 rule_id=getattr(self.rule, 'id', 'unknown')
             )
@@ -159,7 +158,7 @@ class BaseValidator(ABC):
                         target_columns_str, str) else target_columns_str
                 except json.JSONDecodeError:
                     self.logger.log_warning(
-                        f"Invalid JSON in target_columns field",
+                        "Invalid JSON in target_columns field",
                         rule_id=getattr(self.rule, 'id', 'unknown')
                     )
                     columns = []
@@ -178,7 +177,7 @@ class BaseValidator(ABC):
 
         if missing_columns:
             self.logger.log_warning(
-                f"Target columns not found in dataset",
+                "Target columns not found in dataset",
                 rule_id=getattr(self.rule, 'id', 'unknown'),
                 missing_columns=list(missing_columns),
                 available_columns=list(self.df.columns)
@@ -248,7 +247,7 @@ class BaseValidator(ABC):
 
         try:
             self.logger.log_info(
-                f"Starting validation",
+                "Starting validation",
                 **self.validation_context
             )
 
@@ -273,14 +272,14 @@ class BaseValidator(ABC):
             # Choose processing method
             if self._should_use_chunking():
                 self.logger.log_info(
-                    f"Using chunked validation",
+                    "Using chunked validation",
                     dataset_size=len(self.df),
                     chunk_size=self.chunked_reader.chunk_size
                 )
                 issues = self._validate_chunked(result)
             else:
                 self.logger.log_info(
-                    f"Using full dataset validation",
+                    "Using full dataset validation",
                     dataset_size=len(self.df)
                 )
                 issues = self._validate_full(result)
@@ -298,7 +297,7 @@ class BaseValidator(ABC):
             ).total_seconds() * 1000
 
             self.logger.log_info(
-                f"Validation completed",
+                "Validation completed",
                 **result.get_summary(),
                 **self.validation_context
             )
@@ -307,7 +306,7 @@ class BaseValidator(ABC):
 
         except Exception as e:
             self.logger.log_error(
-                f"Validation failed with unexpected error",
+                "Validation failed with unexpected error",
                 exception=e,
                 **self.validation_context
             )
@@ -327,7 +326,7 @@ class BaseValidator(ABC):
                 all_issues.extend(column_issues)
             except Exception as e:
                 self.logger.log_error(
-                    f"Column validation failed",
+                    "Column validation failed",
                     exception=e,
                     column=column,
                     rule_id=getattr(self.rule, 'id', 'unknown')
@@ -352,7 +351,7 @@ class BaseValidator(ABC):
             )
         except Exception as e:
             self.logger.log_error(
-                f"Chunked validation failed",
+                "Chunked validation failed",
                 exception=e,
                 rule_id=getattr(self.rule, 'id', 'unknown')
             )
@@ -389,7 +388,7 @@ class BaseValidator(ABC):
                 issues.extend(row_issues)
             except Exception as e:
                 self.logger.log_warning(
-                    f"Row validation failed",
+                    "Row validation failed",
                     exception=e,
                     row_index=int(idx),
                     column=column

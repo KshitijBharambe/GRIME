@@ -10,10 +10,7 @@ from sqlalchemy.orm import Query, Session
 from sqlalchemy import and_, or_
 from fastapi import HTTPException, status
 
-from app.models import (
-    Organization, OrganizationMember, ResourceShare,
-    Dataset, Rule, Execution, SharePermission
-)
+from app.models import OrganizationMember, ResourceShare, SharePermission
 from app.auth import OrgContext
 
 
@@ -25,10 +22,7 @@ class OrganizationFilter:
 
     @staticmethod
     def filter_by_org(
-        query: Query,
-        model: Any,
-        org_context: OrgContext,
-        include_shared: bool = False
+        query: Query, model: Any, org_context: OrgContext, include_shared: bool = False
     ) -> Query:
         """
         Apply organization filter to a query.
@@ -59,8 +53,8 @@ class OrganizationFilter:
                         ResourceShare.revoked_at.is_(None),
                         or_(
                             ResourceShare.expires_at.is_(None),
-                            ResourceShare.expires_at > Query._now()
-                        )
+                            ResourceShare.expires_at > Query._now(),
+                        ),
                     )
                 )
             )
@@ -71,9 +65,7 @@ class OrganizationFilter:
 
     @staticmethod
     def ensure_org_ownership(
-        resource: Any,
-        org_context: OrgContext,
-        resource_name: str = "Resource"
+        resource: Any, org_context: OrgContext, resource_name: str = "Resource"
     ) -> None:
         """
         Verify that a resource belongs to the current organization.
@@ -90,28 +82,26 @@ class OrganizationFilter:
         if not resource:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"{resource_name} not found"
+                detail=f"{resource_name} not found",
             )
 
-        if not hasattr(resource, 'organization_id'):
+        if not hasattr(resource, "organization_id"):
             # Resource doesn't have organization_id, might be a shared resource
             return
 
         if resource.organization_id != org_context.organization_id:
             # Check if it's a shared resource
-            if hasattr(resource, 'id') and hasattr(resource, '__tablename__'):
-                from sqlalchemy import select
-                from app.database import get_session
+            if hasattr(resource, "id") and hasattr(resource, "__tablename__"):
 
                 # This is a simplified check - in production, inject the session
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"{resource_name} does not belong to your organization"
+                    detail=f"{resource_name} does not belong to your organization",
                 )
             else:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"{resource_name} does not belong to your organization"
+                    detail=f"{resource_name} does not belong to your organization",
                 )
 
     @staticmethod
@@ -119,7 +109,7 @@ class OrganizationFilter:
         resource: Any,
         org_context: OrgContext,
         required_permission: Optional[SharePermission] = None,
-        db: Optional[Session] = None
+        db: Optional[Session] = None,
     ) -> tuple[bool, Optional[SharePermission]]:
         """
         Check if the organization has access to a resource.
@@ -135,22 +125,27 @@ class OrganizationFilter:
             Tuple of (is_owner: bool, permission: Optional[SharePermission])
         """
         # Check if organization owns the resource
-        if hasattr(resource, 'organization_id'):
+        if hasattr(resource, "organization_id"):
             if resource.organization_id == org_context.organization_id:
                 return (True, None)  # Owner has full access
 
         # Check if resource is shared with the organization
-        if db and hasattr(resource, 'id') and hasattr(resource, '__tablename__'):
-            share = db.query(ResourceShare).filter(
-                ResourceShare.resource_type == resource.__tablename__,
-                ResourceShare.resource_id == resource.id,
-                ResourceShare.shared_with_org_id == org_context.organization_id,
-                ResourceShare.revoked_at.is_(None)
-            ).first()
+        if db and hasattr(resource, "id") and hasattr(resource, "__tablename__"):
+            share = (
+                db.query(ResourceShare)
+                .filter(
+                    ResourceShare.resource_type == resource.__tablename__,
+                    ResourceShare.resource_id == resource.id,
+                    ResourceShare.shared_with_org_id == org_context.organization_id,
+                    ResourceShare.revoked_at.is_(None),
+                )
+                .first()
+            )
 
             if share:
                 # Check expiration
                 from datetime import datetime, timezone
+
                 if share.expires_at and datetime.now(timezone.utc) > share.expires_at:
                     return (False, None)  # Share expired
 
@@ -159,9 +154,11 @@ class OrganizationFilter:
                     permission_hierarchy = {
                         SharePermission.view: 1,
                         SharePermission.use: 2,
-                        SharePermission.clone: 3
+                        SharePermission.clone: 3,
                     }
-                    if permission_hierarchy.get(share.permission, 0) >= permission_hierarchy.get(required_permission, 0):
+                    if permission_hierarchy.get(
+                        share.permission, 0
+                    ) >= permission_hierarchy.get(required_permission, 0):
                         return (False, share.permission)
                     return (False, None)  # Insufficient permission
 
@@ -171,9 +168,7 @@ class OrganizationFilter:
 
 
 def create_org_scoped_resource(
-    resource_data: dict,
-    org_context: OrgContext,
-    created_by_field: str = "created_by"
+    resource_data: dict, org_context: OrgContext, created_by_field: str = "created_by"
 ) -> dict:
     """
     Helper to add organization context to resource creation data.
@@ -186,7 +181,7 @@ def create_org_scoped_resource(
     Returns:
         Updated resource data with organization_id and created_by
     """
-    resource_data['organization_id'] = org_context.organization_id
+    resource_data["organization_id"] = org_context.organization_id
     if created_by_field:
         resource_data[created_by_field] = org_context.user_id
     return resource_data
@@ -196,7 +191,7 @@ def validate_org_member_access(
     user_id: str,
     organization_id: str,
     db: Session,
-    min_role: Optional[List[str]] = None
+    min_role: Optional[List[str]] = None,
 ) -> bool:
     """
     Validate that a user is a member of an organization with sufficient role.
@@ -210,12 +205,15 @@ def validate_org_member_access(
     Returns:
         True if user has access, False otherwise
     """
-    from app.models import UserRole
 
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == user_id,
-        OrganizationMember.organization_id == organization_id
-    ).first()
+    membership = (
+        db.query(OrganizationMember)
+        .filter(
+            OrganizationMember.user_id == user_id,
+            OrganizationMember.organization_id == organization_id,
+        )
+        .first()
+    )
 
     if not membership:
         return False
@@ -236,9 +234,9 @@ class AuditLogger:
         action: str,
         resource_type: Optional[str] = None,
         resource_id: Optional[str] = None,
-        metadata: Optional[dict] = None,
+        details: Optional[dict] = None,
         ip_address: Optional[str] = None,
-        user_agent: Optional[str] = None
+        user_agent: Optional[str] = None,
     ):
         """
         Log an action to the audit log.
@@ -249,7 +247,7 @@ class AuditLogger:
             action: Action name (e.g., 'create_dataset', 'delete_rule')
             resource_type: Type of resource affected
             resource_id: ID of resource affected
-            metadata: Additional metadata as dict
+            details: Additional details as dict
             ip_address: IP address of request
             user_agent: User agent string
         """
@@ -264,9 +262,9 @@ class AuditLogger:
             action=action,
             resource_type=resource_type,
             resource_id=resource_id,
-            metadata=json.dumps(metadata) if metadata else None,
+            details=json.dumps(details) if details else None,
             ip_address=ip_address,
-            user_agent=user_agent
+            user_agent=user_agent,
         )
         db.add(log_entry)
         # Note: Caller should commit the transaction
@@ -277,7 +275,7 @@ class AuditLogger:
         user_id: str,
         organization_id: str,
         ip_address: Optional[str] = None,
-        user_agent: Optional[str] = None
+        user_agent: Optional[str] = None,
     ):
         """Log a user login event."""
         from app.models import AuditLog
@@ -289,7 +287,7 @@ class AuditLogger:
             user_id=user_id,
             action="user_login",
             ip_address=ip_address,
-            user_agent=user_agent
+            user_agent=user_agent,
         )
         db.add(log_entry)
         # Note: Caller should commit the transaction
@@ -300,17 +298,16 @@ class AuditLogger:
         org_context: OrgContext,
         invited_email: str,
         role: str,
-        ip_address: Optional[str] = None
+        ip_address: Optional[str] = None,
     ):
         """Log a user invitation."""
-        import json
         AuditLogger.log_action(
             db=db,
             org_context=org_context,
             action="invite_user",
             resource_type="user",
-            metadata={"email": invited_email, "role": role},
-            ip_address=ip_address
+            details={"email": invited_email, "role": role},
+            ip_address=ip_address,
         )
 
     @staticmethod
@@ -320,18 +317,17 @@ class AuditLogger:
         member_id: str,
         old_role: str,
         new_role: str,
-        ip_address: Optional[str] = None
+        ip_address: Optional[str] = None,
     ):
         """Log a member role change."""
-        import json
         AuditLogger.log_action(
             db=db,
             org_context=org_context,
             action="change_member_role",
             resource_type="organization_member",
             resource_id=member_id,
-            metadata={"old_role": old_role, "new_role": new_role},
-            ip_address=ip_address
+            details={"old_role": old_role, "new_role": new_role},
+            ip_address=ip_address,
         )
 
     @staticmethod
@@ -342,19 +338,18 @@ class AuditLogger:
         resource_id: str,
         shared_with_org_id: str,
         permission: str,
-        ip_address: Optional[str] = None
+        ip_address: Optional[str] = None,
     ):
         """Log a resource sharing event."""
-        import json
         AuditLogger.log_action(
             db=db,
             org_context=org_context,
             action="share_resource",
             resource_type=resource_type,
             resource_id=resource_id,
-            metadata={
+            details={
                 "shared_with_org_id": shared_with_org_id,
-                "permission": permission
+                "permission": permission,
             },
-            ip_address=ip_address
+            ip_address=ip_address,
         )

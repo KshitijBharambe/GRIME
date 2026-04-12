@@ -1,9 +1,22 @@
 from pydantic import BaseModel, EmailStr, ConfigDict, Field
 from typing import Optional, List
 from datetime import datetime
+from app.core.config import (
+    GUEST_UPLOAD_LIMIT,
+    GUEST_EXECUTION_LIMIT,
+    GUEST_MAX_FILE_SIZE_BYTES,
+)
 from app.models import (
-    UserRole, SourceType, DatasetStatus, Criticality, RuleKind,
-    ExecutionStatus, ExportFormat, SharePermission, InviteStatus
+    UserRole,
+    SourceType,
+    DatasetStatus,
+    Criticality,
+    RuleKind,
+    ExecutionStatus,
+    ExportFormat,
+    SharePermission,
+    InviteStatus,
+    AccountType,
 )
 
 # Base schemas
@@ -11,6 +24,7 @@ from app.models import (
 
 class BaseSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
+
 
 # User schemas
 
@@ -49,6 +63,7 @@ class UserRoleUpdate(BaseModel):
 
 # Organization schemas
 
+
 class OrganizationBase(BaseModel):
     name: str
     contact_email: EmailStr
@@ -77,6 +92,7 @@ class OrganizationUpdate(BaseModel):
 
 # Organization Member schemas
 
+
 class OrganizationMemberResponse(BaseModel):
     id: str
     organization_id: str
@@ -93,6 +109,7 @@ class MemberRoleUpdate(BaseModel):
 
 
 # Organization Invite schemas
+
 
 class InviteCreate(BaseModel):
     email: EmailStr
@@ -119,6 +136,7 @@ class AcceptInvite(BaseModel):
 
 # Login & Registration schemas (organization-aware)
 
+
 class OrganizationLoginRequest(BaseModel):
     email: EmailStr
     password: str
@@ -131,14 +149,49 @@ class OrganizationTokenResponse(BaseModel):
     user: UserResponse
     organization: OrganizationResponse
     role: UserRole
-    available_organizations: List[OrganizationResponse] = []
+    available_organizations: List[OrganizationResponse] = Field(default_factory=list)
 
 
 class SwitchOrganizationRequest(BaseModel):
     organization_id: str
 
 
+# Personal & Guest auth schemas
+
+
+class PersonalRegisterRequest(BaseModel):
+    email: EmailStr
+    password: str
+    full_name: str
+
+
+class PersonalRegisterResponse(BaseModel):
+    user_id: str
+    email: str
+    organization_id: str
+    access_token: str
+    token_type: str = "bearer"
+
+
+class GuestLoginResponse(BaseModel):
+    user_id: str
+    email: str
+    organization_id: str
+    access_token: str
+    token_type: str = "bearer"
+    expires_at: str  # ISO datetime when guest session expires
+
+
+class GuestUsageResponse(BaseModel):
+    uploads_count: int = 0
+    uploads_limit: int = GUEST_UPLOAD_LIMIT
+    executions_count: int = 0
+    executions_limit: int = GUEST_EXECUTION_LIMIT
+    max_file_size_bytes: int = GUEST_MAX_FILE_SIZE_BYTES
+
+
 # Resource Sharing schemas
+
 
 class ResourceShareCreate(BaseModel):
     resource_type: str  # 'rule', 'template', etc.
@@ -206,6 +259,7 @@ class DatasetVersionResponse(DatasetVersionBase):
     columns: Optional[int]
     model_config = ConfigDict(from_attributes=True)
 
+
 # Dataset Column schemas
 
 
@@ -225,6 +279,7 @@ class DatasetColumnResponse(DatasetColumnBase):
     dataset_id: str
     model_config = ConfigDict(from_attributes=True)
 
+
 # Rule schemas
 
 
@@ -240,22 +295,22 @@ class RuleBase(BaseModel):
 
 
 class RuleCreate(BaseModel):
-    name: str
-    description: Optional[str] = None
+    name: str = Field(..., min_length=1, max_length=256)
+    description: Optional[str] = Field(None, max_length=5000)
     kind: RuleKind
     criticality: Criticality
-    target_columns: List[str]
-    params: dict = {}
+    target_columns: List[str] = Field(..., max_length=100)
+    params: dict = Field(default_factory=dict)
 
 
 class RuleUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
+    name: Optional[str] = Field(None, min_length=1, max_length=256)
+    description: Optional[str] = Field(None, max_length=5000)
     kind: Optional[RuleKind] = None
     criticality: Optional[Criticality] = None
     is_active: Optional[bool] = None
-    target_table: Optional[str] = None
-    target_columns: Optional[List[str]] = None
+    target_table: Optional[str] = Field(None, max_length=256)
+    target_columns: Optional[List[str]] = Field(None, max_length=100)
     params: Optional[dict] = None
 
 
@@ -270,6 +325,7 @@ class RuleResponse(RuleBase):
     is_latest: bool
     change_log: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
+
 
 # Execution schemas
 
@@ -295,6 +351,7 @@ class ExecutionResponse(ExecutionBase):
     total_issues: Optional[int] = None
     summary: Optional[str]  # JSON string
     model_config = ConfigDict(from_attributes=True)
+
 
 # Issue schemas
 
@@ -322,7 +379,10 @@ class IssueResponse(IssueBase):
     rule_snapshot: Optional[str] = None
     created_at: datetime
     resolved: bool
+    fix_count: int = 0
+    dataset_name: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
+
 
 # Fix schemas
 
@@ -342,6 +402,7 @@ class FixResponse(FixBase):
     fixed_by: str
     fixed_at: datetime
     model_config = ConfigDict(from_attributes=True)
+
 
 # Export schemas
 
@@ -363,6 +424,7 @@ class ExportResponse(ExportBase):
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
+
 # File upload schemas
 
 
@@ -379,6 +441,7 @@ class DataProfileResponse(BaseModel):
     columns: List[DatasetColumnResponse]
     data_types_summary: dict
     missing_values_summary: dict
+
 
 # Report schemas
 
@@ -403,11 +466,13 @@ class ExecutionSummary(BaseModel):
     issues_found: int
     data_quality_summary: DataQualitySummary
 
+
 # Rule testing schemas
 
 
 class RuleTestRequest(BaseModel):
-    sample_data: List[dict]
+    sample_data: List[dict] = Field(..., max_length=10000)
+
 
 # Dataset Fixes schemas
 
@@ -462,7 +527,9 @@ class AppliedFixResponse(BaseModel):
     fixed_by: Optional[str]
     applied_at: Optional[str]
 
+
 # Data Quality Metrics schemas
+
 
 class QualityMetricsResponse(BaseModel):
     execution_id: str

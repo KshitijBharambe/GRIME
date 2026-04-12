@@ -6,31 +6,44 @@ Integrates parallel execution, chunking, memory optimization, and structured log
 import pandas as pd
 import json
 import uuid
-from typing import List, Dict, Any, Optional
+from typing import List, Any, Optional
 from sqlalchemy.orm import Session, sessionmaker
 from datetime import datetime, timezone
 
 from app.models import (
-    Rule, RuleKind, Execution, ExecutionRule, Issue,
-    DatasetVersion, User, Criticality, ExecutionStatus
+    Rule,
+    Execution,
+    ExecutionRule,
+    Issue,
+    DatasetVersion,
+    User,
+    ExecutionStatus,
 )
 from app.services.rule_engine import RuleEngineService
 from app.services.dependency_manager import DependencyManager
 from app.utils.parallel_executor import ParallelRuleExecutor, ExecutionMode
 from app.utils.logging_service import get_logger, ExecutionPhase
 from app.utils.memory_optimization import MemoryMonitor, OptimizedDataFrameOperations
-from app.services.rule_versioning import create_rule_snapshot, create_lightweight_rule_snapshot
-from app.validators.base_validator import BaseValidator
-from app.validators.statistical_validators import (
-    StatisticalOutlierValidator, DistributionCheckValidator, CorrelationValidator
+from app.services.rule_versioning import (
+    create_rule_snapshot,
+    create_lightweight_rule_snapshot,
 )
-from app.services.anomaly_detection import MLAnomalyValidator
+from app.core.config import (
+    MIN_RULES_FOR_PARALLEL,
+    MIN_DATASET_SIZE_FOR_PARALLEL,
+    MAX_MEMORY_MB_FOR_PARALLEL,
+)
 
 
 class EnhancedRuleEngineService(RuleEngineService):
     """Enhanced rule engine with parallel execution and comprehensive monitoring"""
 
-    def __init__(self, db: Session, enable_parallel: bool = True, max_workers: Optional[int] = None):
+    def __init__(
+        self,
+        db: Session,
+        enable_parallel: bool = True,
+        max_workers: Optional[int] = None,
+    ):
         """
         Initialize enhanced rule engine.
 
@@ -51,7 +64,7 @@ class EnhancedRuleEngineService(RuleEngineService):
             self.parallel_executor = ParallelRuleExecutor(
                 db_session_factory=session_factory,
                 max_workers=max_workers,
-                execution_mode=ExecutionMode.ADAPTIVE
+                execution_mode=ExecutionMode.ADAPTIVE,
             )
         else:
             self.parallel_executor = None
@@ -60,17 +73,17 @@ class EnhancedRuleEngineService(RuleEngineService):
         self.dependency_manager = DependencyManager(db)
 
         self.logger.log_info(
-            f"Enhanced rule engine initialized",
+            "Enhanced rule engine initialized",
             parallel_enabled=enable_parallel,
             max_workers=max_workers,
-            dependency_management_enabled=True
+            dependency_management_enabled=True,
         )
 
     def execute_rules_on_dataset(
         self,
         dataset_version: DatasetVersion,
         rule_ids: Optional[List[str]],
-        current_user: User
+        current_user: User,
     ) -> Execution:
         """
         Execute rules on a dataset with enhanced performance and logging.
@@ -87,10 +100,11 @@ class EnhancedRuleEngineService(RuleEngineService):
 
         # Get rules to execute
         if rule_ids:
-            rules = self.db.query(Rule).filter(
-                Rule.id.in_(rule_ids),
-                Rule.is_active == True
-            ).all()
+            rules = (
+                self.db.query(Rule)
+                .filter(Rule.id.in_(rule_ids), Rule.is_active == True)
+                .all()
+            )
         else:
             rules = self.get_active_rules()
 
@@ -103,7 +117,10 @@ class EnhancedRuleEngineService(RuleEngineService):
                 [rule.id for rule in rules]
             )
 
-            if dependency_analysis['is_valid'] and dependency_analysis['total_dependencies'] > 0:
+            if (
+                dependency_analysis["is_valid"]
+                and dependency_analysis["total_dependencies"] > 0
+            ):
                 # Get optimal execution order based on dependencies
                 ordered_rule_ids = self.dependency_manager.get_execution_order(
                     [rule.id for rule in rules]
@@ -111,35 +128,38 @@ class EnhancedRuleEngineService(RuleEngineService):
 
                 # Reorder rules according to dependency order
                 rule_dict = {rule.id: rule for rule in rules}
-                rules = [rule_dict[rule_id]
-                         for rule_id in ordered_rule_ids if rule_id in rule_dict]
+                rules = [
+                    rule_dict[rule_id]
+                    for rule_id in ordered_rule_ids
+                    if rule_id in rule_dict
+                ]
 
                 self.logger.log_info(
-                    f"Applied dependency ordering",
+                    "Applied dependency ordering",
                     execution_id=execution_id,
                     rules_count=len(rules),
-                    dependency_analysis=dependency_analysis
+                    dependency_analysis=dependency_analysis,
                 )
             else:
                 self.logger.log_info(
-                    f"No dependencies found or invalid dependencies, using original order",
+                    "No dependencies found or invalid dependencies, using original order",
                     execution_id=execution_id,
-                    dependency_analysis=dependency_analysis
+                    dependency_analysis=dependency_analysis,
                 )
 
         except Exception as dep_error:
             self.logger.log_warning(
-                f"Dependency management failed, using original rule order",
+                "Dependency management failed, using original rule order",
                 execution_id=execution_id,
-                exception=dep_error
+                exception=dep_error,
             )
 
         # Start execution tracking
-        execution_metrics = self.logger.start_execution_tracking(
+        self.logger.start_execution_tracking(
             execution_id=execution_id,
             total_rules=len(rules),
             user_id=current_user.id,
-            dataset_id=dataset_version.dataset_id
+            dataset_id=dataset_version.dataset_id,
         )
 
         # Create execution record
@@ -148,7 +168,7 @@ class EnhancedRuleEngineService(RuleEngineService):
             dataset_version_id=dataset_version.id,
             started_by=current_user.id,
             status=ExecutionStatus.running,
-            total_rules=len(rules)
+            total_rules=len(rules),
         )
 
         self.db.add(execution)
@@ -158,8 +178,7 @@ class EnhancedRuleEngineService(RuleEngineService):
         try:
             # Phase 1: Data Loading
             self.logger.log_execution_phase(
-                execution_id, ExecutionPhase.DATA_LOADING,
-                "Starting dataset loading"
+                execution_id, ExecutionPhase.DATA_LOADING, "Starting dataset loading"
             )
 
             with self.logger.performance_timer("data_loading"):
@@ -167,17 +186,17 @@ class EnhancedRuleEngineService(RuleEngineService):
 
             execution.total_rows = len(df)
             self.logger.log_execution_phase(
-                execution_id, ExecutionPhase.DATA_LOADING,
-                f"Dataset loaded successfully",
+                execution_id,
+                ExecutionPhase.DATA_LOADING,
+                "Dataset loaded successfully",
                 rows=len(df),
                 columns=len(df.columns),
-                memory_mb=MemoryMonitor.get_memory_usage()['rss_mb']
+                memory_mb=MemoryMonitor.get_memory_usage()["rss_mb"],
             )
 
             # Phase 2: Rule Execution
             self.logger.log_execution_phase(
-                execution_id, ExecutionPhase.RULE_EXECUTION,
-                "Starting rule execution"
+                execution_id, ExecutionPhase.RULE_EXECUTION, "Starting rule execution"
             )
 
             all_issues = []
@@ -187,40 +206,43 @@ class EnhancedRuleEngineService(RuleEngineService):
             if self.enable_parallel and self._should_use_parallel_execution(rules, df):
                 # Use parallel execution
                 self.logger.log_info(
-                    f"Using parallel rule execution",
+                    "Using parallel rule execution",
                     execution_id=execution_id,
                     rules_count=len(rules),
-                    dataset_rows=len(df)
+                    dataset_rows=len(df),
                 )
 
-                parallel_results = self._execute_rules_parallel(
-                    rules, df, execution_id)
-                all_issues, successful_rules, failed_rules = self._process_parallel_results(
-                    parallel_results, execution, execution_id
+                parallel_results = self._execute_rules_parallel(rules, df, execution_id)
+                all_issues, successful_rules, failed_rules = (
+                    self._process_parallel_results(
+                        parallel_results, execution, execution_id
+                    )
                 )
             else:
                 # Use sequential execution
                 self.logger.log_info(
-                    f"Using sequential rule execution",
+                    "Using sequential rule execution",
                     execution_id=execution_id,
                     rules_count=len(rules),
-                    dataset_rows=len(df)
+                    dataset_rows=len(df),
                 )
 
-                all_issues, successful_rules, failed_rules = self._execute_rules_sequential(
-                    rules, df, execution, execution_id
+                all_issues, successful_rules, failed_rules = (
+                    self._execute_rules_sequential(rules, df, execution, execution_id)
                 )
 
             # Phase 3: Issue Processing
             self.logger.log_execution_phase(
-                execution_id, ExecutionPhase.ISSUE_PROCESSING,
-                "Processing execution results"
+                execution_id,
+                ExecutionPhase.ISSUE_PROCESSING,
+                "Processing execution results",
             )
 
             # Phase 4: Finalization
             self.logger.log_execution_phase(
-                execution_id, ExecutionPhase.FINALIZATION,
-                "Finalizing execution results"
+                execution_id,
+                ExecutionPhase.FINALIZATION,
+                "Finalizing execution results",
             )
 
             # Update execution status and statistics
@@ -235,21 +257,23 @@ class EnhancedRuleEngineService(RuleEngineService):
 
             # Calculate summary statistics
             if all_issues:
-                execution.rows_affected = len(
-                    set(issue.row_index for issue in all_issues))
+                execution.rows_affected = len({issue.row_index for issue in all_issues})
                 execution.columns_affected = len(
-                    set(issue.column_name for issue in all_issues))
+                    {issue.column_name for issue in all_issues}
+                )
             else:
                 execution.rows_affected = 0
                 execution.columns_affected = 0
 
-            execution.summary = json.dumps({
-                'total_issues': len(all_issues),
-                'successful_rules': successful_rules,
-                'failed_rules': failed_rules,
-                'issues_by_severity': self._count_issues_by_severity(all_issues),
-                'issues_by_category': self._count_issues_by_category(all_issues)
-            })
+            execution.summary = json.dumps(
+                {
+                    "total_issues": len(all_issues),
+                    "successful_rules": successful_rules,
+                    "failed_rules": failed_rules,
+                    "issues_by_severity": self._count_issues_by_severity(all_issues),
+                    "issues_by_category": self._count_issues_by_category(all_issues),
+                }
+            )
 
             self.db.commit()
 
@@ -259,14 +283,15 @@ class EnhancedRuleEngineService(RuleEngineService):
                 successful_rules=successful_rules,
                 failed_rules=failed_rules,
                 total_rows=len(df),
-                total_issues=len(all_issues)
+                total_issues=len(all_issues),
             )
 
             self.logger.log_execution_phase(
-                execution_id, ExecutionPhase.FINALIZATION,
+                execution_id,
+                ExecutionPhase.FINALIZATION,
                 "Execution completed successfully",
                 duration_ms=final_metrics.duration_ms,
-                total_issues=len(all_issues)
+                total_issues=len(all_issues),
             )
 
             return execution
@@ -277,19 +302,18 @@ class EnhancedRuleEngineService(RuleEngineService):
                 execution_id=execution_id,
                 exception=e,
                 context={
-                    'dataset_version_id': dataset_version.id,
-                    'rules_count': len(rules),
-                    'user_id': current_user.id
-                }
+                    "dataset_version_id": dataset_version.id,
+                    "rules_count": len(rules),
+                    "user_id": current_user.id,
+                },
             )
 
             # Update execution with error status
             execution.status = ExecutionStatus.failed
             execution.finished_at = datetime.now(timezone.utc)
-            execution.summary = json.dumps({
-                'error': str(e),
-                'error_report': error_report
-            })
+            execution.summary = json.dumps(
+                {"error": "Rule execution failed.", "error_report": error_report}
+            )
 
             self.db.commit()
 
@@ -299,16 +323,14 @@ class EnhancedRuleEngineService(RuleEngineService):
                 successful_rules=0,
                 failed_rules=len(rules),
                 total_rows=0,
-                total_issues=0
+                total_issues=0,
             )
 
             self.logger.log_critical(
-                f"Rule execution failed",
-                exception=e,
-                execution_id=execution_id
+                "Rule execution failed", exception=e, execution_id=execution_id
             )
 
-            raise Exception(f"Rule execution failed: {str(e)}")
+            raise Exception("Rule execution failed due to an internal error.")
 
         finally:
             # Cleanup
@@ -316,11 +338,12 @@ class EnhancedRuleEngineService(RuleEngineService):
                 self.parallel_executor.cleanup()
 
             self.logger.log_execution_phase(
-                execution_id, ExecutionPhase.CLEANUP,
-                "Cleanup completed"
+                execution_id, ExecutionPhase.CLEANUP, "Cleanup completed"
             )
 
-    def _load_and_optimize_dataset(self, dataset_version: DatasetVersion) -> pd.DataFrame:
+    def _load_and_optimize_dataset(
+        self, dataset_version: DatasetVersion
+    ) -> pd.DataFrame:
         """Load and optimize dataset for processing"""
         # Load dataset using parent method
         df = self._load_dataset_as_dataframe(dataset_version)
@@ -332,14 +355,16 @@ class EnhancedRuleEngineService(RuleEngineService):
 
         # Log optimizations applied
         self.logger.log_info(
-            f"Dataset optimized",
-            original_memory_mb=MemoryMonitor.get_memory_usage()['rss_mb'],
-            optimized_memory_mb=MemoryMonitor.get_memory_usage()['rss_mb']
+            "Dataset optimized",
+            original_memory_mb=MemoryMonitor.get_memory_usage()["rss_mb"],
+            optimized_memory_mb=MemoryMonitor.get_memory_usage()["rss_mb"],
         )
 
         return df
 
-    def _should_use_parallel_execution(self, rules: List[Rule], df: pd.DataFrame) -> bool:
+    def _should_use_parallel_execution(
+        self, rules: List[Rule], df: pd.DataFrame
+    ) -> bool:
         """Determine if parallel execution should be used"""
         if not self.enable_parallel or not self.parallel_executor:
             return False
@@ -351,67 +376,75 @@ class EnhancedRuleEngineService(RuleEngineService):
 
         rules_count = len(rules)
         dataset_size = len(df)
-        memory_usage = MemoryMonitor.get_memory_usage()['rss_mb']
+        memory_usage = MemoryMonitor.get_memory_usage()["rss_mb"]
 
         # Heuristics for parallel execution
         should_parallel = (
-            rules_count >= 3 and
-            dataset_size >= 1000 and
-            memory_usage < 1000  # Less than 1GB memory usage
+            rules_count >= MIN_RULES_FOR_PARALLEL
+            and dataset_size >= MIN_DATASET_SIZE_FOR_PARALLEL
+            and memory_usage < MAX_MEMORY_MB_FOR_PARALLEL
         )
 
         self.logger.log_info(
-            f"Parallel execution decision",
+            "Parallel execution decision",
             should_parallel=should_parallel,
             rules_count=rules_count,
             dataset_size=dataset_size,
-            memory_usage_mb=memory_usage
+            memory_usage_mb=memory_usage,
         )
 
         return should_parallel
 
-    def _execute_rules_parallel(self, rules: List[Rule], df: pd.DataFrame,
-                                execution_id: str) -> List[Any]:
+    def _execute_rules_parallel(
+        self, rules: List[Rule], df: pd.DataFrame, execution_id: str
+    ) -> List[Any]:
         """Execute rules in parallel"""
-        with self.logger.performance_timer("parallel_rule_execution", execution_id=execution_id):
+        with self.logger.performance_timer(
+            "parallel_rule_execution", execution_id=execution_id
+        ):
             results = self.parallel_executor.execute_rules(
                 rules=rules,
                 df=df,
                 validators=self.validators,
-                execution_id=execution_id
+                execution_id=execution_id,
             )
 
             # Log parallel execution statistics
             stats = self.parallel_executor.get_execution_stats()
             if stats:
                 self.logger.log_performance(
-                    f"Parallel execution completed",
+                    "Parallel execution completed",
                     duration_ms=stats.total_execution_time,
                     parallel_efficiency=stats.parallel_efficiency,
                     peak_memory_mb=stats.peak_memory_usage,
                     successful_rules=stats.successful_rules,
-                    failed_rules=stats.failed_rules
+                    failed_rules=stats.failed_rules,
                 )
 
             return results
 
-    def _execute_rules_sequential(self, rules: List[Rule], df: pd.DataFrame,
-                                  execution: Execution, execution_id: str) -> tuple:
+    def _execute_rules_sequential(
+        self,
+        rules: List[Rule],
+        df: pd.DataFrame,
+        execution: Execution,
+        execution_id: str,
+    ) -> tuple:
         """Execute rules sequentially with enhanced logging"""
         all_issues = []
         successful_rules = 0
         failed_rules = 0
 
         for rule in rules:
-            rule_id = getattr(rule, 'id', '')
-            rule_name = getattr(rule, 'name', '')
+            rule_id = getattr(rule, "id", "")
+            rule_name = getattr(rule, "name", "")
 
             # Start rule tracking
             self.logger.start_rule_tracking(
                 rule_id=rule_id,
                 rule_name=rule_name,
-                rule_kind=str(getattr(rule, 'kind', 'unknown')),
-                execution_id=execution_id
+                rule_kind=str(getattr(rule, "kind", "unknown")),
+                execution_id=execution_id,
             )
 
             try:
@@ -420,50 +453,50 @@ class EnhancedRuleEngineService(RuleEngineService):
                 execution_rule = ExecutionRule(
                     execution_id=execution.id,
                     rule_id=rule_id,
-                    rule_snapshot=rule_snapshot
+                    rule_snapshot=rule_snapshot,
                 )
                 self.db.add(execution_rule)
 
                 # Validate and execute rule
-                rule_kind = getattr(rule, 'kind', None)
+                rule_kind = getattr(rule, "kind", None)
                 if rule_kind is None:
                     raise Exception("Rule has no kind specified")
 
                 validator_class = self.validators.get(rule_kind)
                 if not validator_class:
                     raise Exception(
-                        f"No validator available for rule kind: {rule_kind}")
+                        f"No validator available for rule kind: {rule_kind}"
+                    )
 
                 # Execute validation with timing
                 start_time = datetime.now(timezone.utc)
-                initial_memory = MemoryMonitor.get_memory_usage()['rss_mb']
+                initial_memory = MemoryMonitor.get_memory_usage()["rss_mb"]
 
                 validator = validator_class(rule, df, self.db)
                 issues = validator.validate()
 
                 end_time = datetime.now(timezone.utc)
-                final_memory = MemoryMonitor.get_memory_usage()['rss_mb']
+                final_memory = MemoryMonitor.get_memory_usage()["rss_mb"]
 
                 # Create issue records
                 rule_issues = []
                 lightweight_snapshot = create_lightweight_rule_snapshot(rule)
 
                 for issue_data in issues:
-                    if 'row_index' not in issue_data or 'column_name' not in issue_data:
+                    if "row_index" not in issue_data or "column_name" not in issue_data:
                         continue
 
                     issue = Issue(
                         execution_id=execution.id,
                         rule_id=rule_id,
                         rule_snapshot=lightweight_snapshot,
-                        row_index=issue_data['row_index'],
-                        column_name=issue_data['column_name'],
-                        current_value=issue_data.get('current_value'),
-                        suggested_value=issue_data.get('suggested_value'),
-                        message=issue_data.get(
-                            'message', 'Data quality issue found'),
-                        category=issue_data.get('category', 'unknown'),
-                        severity=rule.criticality
+                        row_index=issue_data["row_index"],
+                        column_name=issue_data["column_name"],
+                        current_value=issue_data.get("current_value"),
+                        suggested_value=issue_data.get("suggested_value"),
+                        message=issue_data.get("message", "Data quality issue found"),
+                        category=issue_data.get("category", "unknown"),
+                        severity=rule.criticality,
                     )
                     self.db.add(issue)
                     rule_issues.append(issue)
@@ -471,10 +504,12 @@ class EnhancedRuleEngineService(RuleEngineService):
 
                 # Update execution rule stats
                 execution_rule.error_count = len(rule_issues)
-                execution_rule.rows_flagged = len(
-                    set(i.row_index for i in rule_issues)) if rule_issues else 0
-                execution_rule.cols_flagged = len(
-                    set(i.column_name for i in rule_issues)) if rule_issues else 0
+                execution_rule.rows_flagged = (
+                    len({i.row_index for i in rule_issues}) if rule_issues else 0
+                )
+                execution_rule.cols_flagged = (
+                    len({i.column_name for i in rule_issues}) if rule_issues else 0
+                )
 
                 # End rule tracking with success
                 self.logger.end_rule_tracking(
@@ -482,7 +517,7 @@ class EnhancedRuleEngineService(RuleEngineService):
                     rows_processed=len(df),
                     issues_found=len(issues),
                     memory_usage_mb=final_memory - initial_memory,
-                    success=True
+                    success=True,
                 )
 
                 successful_rules += 1
@@ -495,19 +530,19 @@ class EnhancedRuleEngineService(RuleEngineService):
                     issues_found=0,
                     memory_usage_mb=0,
                     success=False,
-                    error_message=str(e)
+                    error_message=str(e),  # internal logging only
                 )
 
-                # Update execution rule with error
-                if 'execution_rule' in locals():
-                    execution_rule.note = f"Error executing rule: {str(e)}"
+                # Update execution rule with error — store generic message for client-visible note
+                if "execution_rule" in locals():
+                    execution_rule.note = "Rule execution failed."
 
                 failed_rules += 1
                 self.logger.log_error(
-                    f"Rule execution failed",
+                    "Rule execution failed",
                     exception=e,
                     rule_id=rule_id,
-                    rule_name=rule_name
+                    rule_name=rule_name,
                 )
 
             # Commit after each rule to avoid large transactions
@@ -515,8 +550,9 @@ class EnhancedRuleEngineService(RuleEngineService):
 
         return all_issues, successful_rules, failed_rules
 
-    def _process_parallel_results(self, parallel_results: List[Any], execution: Execution,
-                                  execution_id: str) -> tuple:
+    def _process_parallel_results(
+        self, parallel_results: List[Any], execution: Execution, execution_id: str
+    ) -> tuple:
         """Process results from parallel execution"""
         all_issues = []
         successful_rules = 0
@@ -530,11 +566,13 @@ class EnhancedRuleEngineService(RuleEngineService):
             execution_rule = ExecutionRule(
                 execution_id=execution.id,
                 rule_id=rule_id,
-                rule_snapshot=json.dumps({
-                    'rule_id': rule_id,
-                    'rule_name': rule_name,
-                    'execution_mode': 'parallel'
-                })
+                rule_snapshot=json.dumps(
+                    {
+                        "rule_id": rule_id,
+                        "rule_name": rule_name,
+                        "execution_mode": "parallel",
+                    }
+                ),
             )
             self.db.add(execution_rule)
 
@@ -542,24 +580,24 @@ class EnhancedRuleEngineService(RuleEngineService):
                 # Create issue records from parallel results
                 rule_issues = []
                 lightweight_snapshot = create_lightweight_rule_snapshot_from_result(
-                    result)
+                    result
+                )
 
                 for issue_data in result.issues:
-                    if 'row_index' not in issue_data or 'column_name' not in issue_data:
+                    if "row_index" not in issue_data or "column_name" not in issue_data:
                         continue
 
                     issue = Issue(
                         execution_id=execution.id,
                         rule_id=rule_id,
                         rule_snapshot=lightweight_snapshot,
-                        row_index=issue_data['row_index'],
-                        column_name=issue_data['column_name'],
-                        current_value=issue_data.get('current_value'),
-                        suggested_value=issue_data.get('suggested_value'),
-                        message=issue_data.get(
-                            'message', 'Data quality issue found'),
-                        category=issue_data.get('category', 'unknown'),
-                        severity='medium'  # Default severity for parallel execution
+                        row_index=issue_data["row_index"],
+                        column_name=issue_data["column_name"],
+                        current_value=issue_data.get("current_value"),
+                        suggested_value=issue_data.get("suggested_value"),
+                        message=issue_data.get("message", "Data quality issue found"),
+                        category=issue_data.get("category", "unknown"),
+                        severity="medium",  # Default severity for parallel execution
                     )
                     self.db.add(issue)
                     rule_issues.append(issue)
@@ -573,14 +611,16 @@ class EnhancedRuleEngineService(RuleEngineService):
                 successful_rules += 1
 
             else:
-                execution_rule.note = result.error_message or "Parallel execution failed"
+                execution_rule.note = (
+                    result.error_message or "Parallel execution failed"
+                )
                 failed_rules += 1
 
                 self.logger.log_error(
-                    f"Parallel rule execution failed",
+                    "Parallel rule execution failed",
                     rule_id=rule_id,
                     rule_name=rule_name,
-                    error_message=result.error_message
+                    error_message=result.error_message,
                 )
 
         return all_issues, successful_rules, failed_rules
@@ -588,10 +628,12 @@ class EnhancedRuleEngineService(RuleEngineService):
 
 def create_lightweight_rule_snapshot_from_result(result) -> str:
     """Create lightweight rule snapshot from parallel execution result"""
-    return json.dumps({
-        'rule_id': result.rule_id,
-        'rule_name': result.rule_name,
-        'execution_mode': 'parallel',
-        'execution_time_ms': result.execution_time,
-        'memory_usage_mb': result.memory_usage
-    })
+    return json.dumps(
+        {
+            "rule_id": result.rule_id,
+            "rule_name": result.rule_name,
+            "execution_mode": "parallel",
+            "execution_time_ms": result.execution_time,
+            "memory_usage_mb": result.memory_usage,
+        }
+    )

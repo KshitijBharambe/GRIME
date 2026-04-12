@@ -126,9 +126,8 @@ services:
   # MinIO - Production Simulation Overrides
   # ==========================================================================
   minio:
-    # Don't expose console in prod-sim
-    ports:
-      - "9000:9000"  # API only (needed for backend access)
+    # Don't expose MinIO ports to host in production (backend accesses via internal docker network)
+    ports: []
     
     deploy:
       resources:

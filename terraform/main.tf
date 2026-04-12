@@ -132,27 +132,27 @@ locals {
       version     = "latest"
     }
     JWT_SECRET_KEY = {
-      secret_name = "${var.app_name}-${var.environment}-jwt-secret"
+      secret_name = "dht-${var.environment}-jwt"  # Shortened name
       version     = "latest"
     }
   }
 }
 
-# Secret Manager Module
+# Secret Manager Module - Must be created BEFORE Cloud Run
 module "secret_manager" {
   source = "./modules/secret-manager"
 
   project_id = var.project_id
   secrets = {
-    "${var.app_name}-${var.environment}-jwt-secret" = {
+    "dht-${var.environment}-jwt" = {  # Shortened name
       value       = var.jwt_secret_key
       description = "JWT secret key for authentication"
     }
   }
   labels                     = var.labels
-  cloud_run_service_account  = module.cloud_run.service_account_email
+  cloud_run_service_account  = null  # Will be granted access after Cloud Run is created
 
-  depends_on = [module.cloud_run]
+  depends_on = [google_project_service.apis]
 }
 
 # Cloud Run Module
@@ -173,12 +173,15 @@ module "cloud_run" {
   vpc_connector_id      = module.networking.vpc_connector_id
   environment_variables = local.env_vars
   secrets               = local.secrets
-  allow_unauthenticated = true
+  # NOTE: Set to true only for public APIs that handle their own authentication (e.g., JWT).
+  # For internal services, keep false to require GCP IAM authentication.
+  allow_unauthenticated = var.allow_unauthenticated
   custom_domain         = var.domain_name
 
   depends_on = [
     module.networking,
-    module.cloud_sql
+    module.cloud_sql,
+    module.secret_manager
   ]
 }
 
@@ -197,4 +200,14 @@ module "cloud_storage" {
   cloud_run_service_account = module.cloud_run.service_account_email
 
   depends_on = [module.cloud_run]
+}
+
+# Grant Cloud Run service account access to secrets (after both are created)
+resource "google_secret_manager_secret_iam_member" "jwt_secret_access" {
+  secret_id = "dht-${var.environment}-jwt"
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${module.cloud_run.service_account_email}"
+  project   = var.project_id
+
+  depends_on = [module.secret_manager, module.cloud_run]
 }

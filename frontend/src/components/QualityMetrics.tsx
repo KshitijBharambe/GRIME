@@ -7,41 +7,23 @@ import { QualityMetrics } from "@/types/api";
 import { AlertTriangle, CheckCircle, TrendingUp, Info, Gauge } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/utils/date";
+import { getScoreColor, getScoreBgColor, getScoreBadgeVariant, getScoreLabel } from "@/lib/thresholds";
 
 interface QualityMetricsCardProps {
-  metrics: QualityMetrics | undefined;
-  isLoading?: boolean;
-  className?: string;
-  compact?: boolean;
+  readonly metrics: QualityMetrics | undefined;
+  readonly isLoading?: boolean;
+  readonly className?: string;
+  readonly compact?: boolean;
 }
 
 interface ScoreCardProps {
-  label: string;
-  value: number;
-  description: string;
-  icon: React.ReactNode;
-  compact?: boolean;
+  readonly label: string;
+  readonly value: number;
+  readonly description: string;
+  readonly icon: React.ReactNode;
+  readonly compact?: boolean;
 }
 
-function getScoreColor(score: number): string {
-  if (score >= 80) return "text-green-600";
-  if (score >= 60) return "text-yellow-600";
-  if (score >= 40) return "text-orange-600";
-  return "text-red-600";
-}
-
-function getScoreBgColor(score: number): string {
-  if (score >= 80) return "bg-green-100";
-  if (score >= 60) return "bg-yellow-100";
-  if (score >= 40) return "bg-orange-100";
-  return "bg-red-100";
-}
-
-function getScoreBadgeVariant(score: number): "default" | "secondary" | "destructive" | "outline" {
-  if (score >= 80) return "default";
-  if (score >= 60) return "secondary";
-  return "destructive";
-}
 
 function ScoreCard({ label, value, description, icon, compact = false }: ScoreCardProps) {
   const scoreColor = getScoreColor(value);
@@ -110,7 +92,7 @@ export function QualityMetricsCard({
         </CardHeader>
         <CardContent className="space-y-6">
           {[...Array(3)].map((_, index) => (
-            <div key={index} className="space-y-2">
+            <div key={`skeleton-quality-metric-${index}`} className="space-y-2">
               <div className="flex items-center justify-between">
                 <div className="h-4 w-32 bg-muted animate-pulse rounded" />
                 <div className="h-8 w-16 bg-muted animate-pulse rounded" />
@@ -137,7 +119,7 @@ export function QualityMetricsCard({
         </CardHeader>
         <CardContent>
           <div className="flex flex-col items-center justify-center py-8 text-center">
-            <Info className="h-12 w-12 text-muted-foreground mb-4" />
+            <Info className="h-6 w-6 text-muted-foreground mb-4" />
             <p className="text-muted-foreground">
               No quality metrics available
             </p>
@@ -161,7 +143,7 @@ export function QualityMetricsCard({
         </CardHeader>
         <CardContent>
           <div className="flex flex-col items-center justify-center py-8 text-center border border-yellow-200 bg-yellow-50 rounded-lg">
-            <AlertTriangle className="h-12 w-12 text-yellow-600 mb-4" />
+            <AlertTriangle className="h-6 w-6 text-yellow-600 mb-4" />
             <p className="font-semibold text-yellow-800 mb-2">Metrics Not Available</p>
             <p className="text-sm text-yellow-700">
               {metrics.message || "Quality metrics could not be computed for this execution."}
@@ -241,7 +223,7 @@ export function QualityMetricsCompact({
     return (
       <div className={cn("grid gap-4 md:grid-cols-3", className)}>
         {[...Array(3)].map((_, index) => (
-          <Card key={index}>
+          <Card key={`skeleton-compact-${index}`}>
             <CardContent className="pt-6">
               <div className="space-y-2">
                 <div className="h-4 w-24 bg-muted animate-pulse rounded" />
@@ -291,7 +273,7 @@ export function QualityMetricsCompact({
   return (
     <div className={cn("grid gap-4 md:grid-cols-3", className)}>
       {metricCards.map((metric) => (
-        <Card key={metric.label}>
+        <Card key={metric.description}>
           <CardContent className="pt-6">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -310,7 +292,7 @@ export function QualityMetricsCompact({
                   {metric.value.toFixed(1)}%
                 </span>
                 <Badge variant={getScoreBadgeVariant(metric.value)} className="text-xs">
-                  {metric.value >= 80 ? "Good" : metric.value >= 60 ? "Fair" : "Poor"}
+                  {getScoreLabel(metric.value)}
                 </Badge>
               </div>
               <Progress value={metric.value} className="h-1.5" />

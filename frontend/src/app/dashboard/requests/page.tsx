@@ -46,49 +46,13 @@ import {
   Ban
 } from 'lucide-react'
 import { MainLayout } from '@/components/layout/main-layout'
+import { useAuthenticatedApi } from '@/lib/hooks/useAuthenticatedApi'
+import apiClient from '@/lib/api'
 import { AccessRequest, RequestType, RequestStatus } from '@/types/api'
-
-// Mock API calls - replace with actual API client calls
-const mockGetMyRequests = async (): Promise<AccessRequest[]> => {
-  // This will be replaced with apiClient.getMyAccessRequests()
-  return [
-    {
-      id: '1',
-      organization_id: 'org1',
-      request_type: 'password_change',
-      status: 'pending',
-      requester_id: 'user1',
-      requester_name: 'John Doe',
-      requester_email: 'john@example.com',
-      required_approver_role: 'admin',
-      reason: 'Forgot my password',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    },
-  ]
-}
-
-const mockGetPendingApprovals = async (): Promise<AccessRequest[]> => {
-  // This will be replaced with apiClient.getPendingApprovals()
-  return [
-    {
-      id: '2',
-      organization_id: 'org1',
-      request_type: 'role_change',
-      status: 'pending',
-      requester_id: 'user2',
-      requester_name: 'Jane Smith',
-      requester_email: 'jane@example.com',
-      required_approver_role: 'owner',
-      reason: 'Need admin access for project management',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    },
-  ]
-}
 
 export default function RequestsPage() {
   const { data: session } = useSession()
+  const { hasToken } = useAuthenticatedApi()
   const [myRequests, setMyRequests] = useState<AccessRequest[]>([])
   const [pendingApprovals, setPendingApprovals] = useState<AccessRequest[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -107,18 +71,20 @@ export default function RequestsPage() {
 
   const isOwnerOrAdmin = session?.user?.role === 'owner' || session?.user?.role === 'admin'
   const isOwner = session?.user?.role === 'owner'
+  // Password change only available for org accounts (not personal)
+  const isPersonalAccount = session?.user?.accountType === 'personal'
 
   useEffect(() => {
-    loadRequests()
-  }, [])
+    if (hasToken) loadRequests()
+  }, [hasToken])
 
   const loadRequests = async () => {
     setIsLoading(true)
     setError('')
     try {
       const [myReqs, approvals] = await Promise.all([
-        mockGetMyRequests(),
-        isOwnerOrAdmin ? mockGetPendingApprovals() : Promise.resolve([]),
+        apiClient.getMyAccessRequests(),
+        isOwnerOrAdmin ? apiClient.getPendingApprovals() : Promise.resolve([]),
       ])
       setMyRequests(myReqs)
       setPendingApprovals(approvals)
@@ -138,9 +104,7 @@ export default function RequestsPage() {
     setSuccess('')
 
     try {
-      // Replace with: await apiClient.approveAccessRequest(selectedRequest.id, { admin_notes: adminNotes })
-      await new Promise(resolve => setTimeout(resolve, 1000)) // Mock delay
-
+      await apiClient.approveAccessRequest(selectedRequest.id, { admin_notes: adminNotes })
       setSuccess(`Request from ${selectedRequest.requester_name} has been approved`)
       setShowApprovalDialog(false)
       setSelectedRequest(null)
@@ -162,9 +126,7 @@ export default function RequestsPage() {
     setSuccess('')
 
     try {
-      // Replace with: await apiClient.rejectAccessRequest(selectedRequest.id, { admin_notes: adminNotes })
-      await new Promise(resolve => setTimeout(resolve, 1000)) // Mock delay
-
+      await apiClient.rejectAccessRequest(selectedRequest.id, { admin_notes: adminNotes })
       setSuccess(`Request from ${selectedRequest.requester_name} has been rejected`)
       setShowApprovalDialog(false)
       setSelectedRequest(null)
@@ -180,9 +142,7 @@ export default function RequestsPage() {
 
   const handleCancel = async (requestId: string) => {
     try {
-      // Replace with: await apiClient.cancelAccessRequest(requestId)
-      await new Promise(resolve => setTimeout(resolve, 500)) // Mock delay
-
+      await apiClient.cancelAccessRequest(requestId)
       setSuccess('Request cancelled successfully')
       await loadRequests()
     } catch (err: unknown) {
@@ -331,7 +291,7 @@ export default function RequestsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Types</SelectItem>
-                    <SelectItem value="password_change">Password Change</SelectItem>
+                    {!isPersonalAccount && <SelectItem value="password_change">Password Change</SelectItem>}
                     <SelectItem value="role_change">Role Change</SelectItem>
                     <SelectItem value="compartment_access">Compartment Access</SelectItem>
                     <SelectItem value="data_access">Data Access</SelectItem>

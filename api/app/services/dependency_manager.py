@@ -3,12 +3,11 @@ Service for managing rule dependencies and execution order.
 """
 
 import json
-import logging
-from typing import List, Dict, Any, Set, Optional, Tuple
+from typing import List, Dict, Any, Set, Optional
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_
+from sqlalchemy import and_
 
-from app.models import Rule, RuleKind
+from app.models import Rule
 from app.utils.logging_service import get_logger
 
 
@@ -257,7 +256,7 @@ class DependencyManager:
             execution_order = graph.topological_sort()
 
             self.logger.log_info(
-                f"Generated execution order",
+                "Generated execution order",
                 total_rules=len(execution_order),
                 rule_ids=execution_order[:10] if len(
                     execution_order) > 10 else execution_order
@@ -267,7 +266,7 @@ class DependencyManager:
 
         except DependencyError as e:
             self.logger.log_error(
-                f"Failed to generate execution order",
+                "Failed to generate execution order",
                 exception=e,
                 validation_result=validation
             )
@@ -375,7 +374,7 @@ class DependencyManager:
         self.db.commit()
 
         self.logger.log_info(
-            f"Updated rule dependencies",
+            "Updated rule dependencies",
             rule_id=rule_id,
             dependencies=dependencies,
             priority=priority,

@@ -36,7 +36,7 @@ import {
   useCancelExecution,
   useExecutionQualityMetrics,
 } from "@/lib/hooks/useExecutions";
-import { Issue } from "@/lib/hooks/useIssues";
+import type { Issue } from "@/types/api";
 import {
   Activity,
   Clock,
@@ -53,8 +53,20 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { ExecutionStatus, Criticality } from "@/types/api";
-import { formatDate, formatRelativeTime, formatDateInTimezone, getUserTimezone, isValidDate } from "@/lib/utils/date";
+import {
+  formatDate,
+  formatRelativeTime,
+  formatDateInTimezone,
+  getUserTimezone,
+  isValidDate,
+} from "@/lib/utils/date";
 import { QualityMetricsCompact } from "@/components/QualityMetrics";
+import { ExecutionHeatmap } from "@/components/executions/ExecutionHeatmap";
+import { ExecutionTimeline } from "@/components/executions/ExecutionTimeline";
+import { ExecutionDrillDown } from "@/components/executions/ExecutionDrillDown";
+import { useState as useStateDrillDown } from "react";
+import { SEVERITY_COLORS, ICON_SIZES } from "@/lib/ui-tokens";
+import { LoadingState, EmptyState, ErrorState } from "@/components/ui/state-views";
 
 const statusColors: Record<ExecutionStatus, string> = {
   queued: "bg-gray-100 text-gray-800",
@@ -65,19 +77,14 @@ const statusColors: Record<ExecutionStatus, string> = {
 };
 
 const statusIcons: Record<ExecutionStatus, React.ReactNode> = {
-  queued: <Clock className="h-4 w-4" />,
-  running: <Activity className="h-4 w-4 animate-spin" />,
-  succeeded: <CheckCircle className="h-4 w-4" />,
-  failed: <XCircle className="h-4 w-4" />,
-  partially_succeeded: <AlertTriangle className="h-4 w-4" />,
+  queued: <Clock className={ICON_SIZES.sm} />,
+  running: <Activity className={`${ICON_SIZES.sm} animate-spin`} />,
+  succeeded: <CheckCircle className={ICON_SIZES.sm} />,
+  failed: <XCircle className={ICON_SIZES.sm} />,
+  partially_succeeded: <AlertTriangle className={ICON_SIZES.sm} />,
 };
 
-const severityColors: Record<Criticality, string> = {
-  low: "bg-blue-100 text-blue-800",
-  medium: "bg-yellow-100 text-yellow-800",
-  high: "bg-orange-100 text-orange-800",
-  critical: "bg-red-100 text-red-800",
-};
+const severityColors = SEVERITY_COLORS;
 
 // Type for parsed rule data
 interface RuleSnapshotData {
@@ -96,7 +103,11 @@ interface RuleSnapshotData {
 }
 
 // Component to display detailed rule information in a dialog
-function RuleSnapshotDialog({ ruleSnapshot }: { ruleSnapshot: string | null | undefined }) {
+function RuleSnapshotDialog({
+  ruleSnapshot,
+}: {
+  ruleSnapshot: string | null | undefined;
+}) {
   if (!ruleSnapshot) {
     return (
       <Dialog>
@@ -111,7 +122,8 @@ function RuleSnapshotDialog({ ruleSnapshot }: { ruleSnapshot: string | null | un
             <DialogDescription>No rule snapshot available</DialogDescription>
           </DialogHeader>
           <div className="text-center py-8 text-muted-foreground">
-            Rule information not found. This may be an older execution before snapshots were implemented.
+            Rule information not found. This may be an older execution before
+            snapshots were implemented.
           </div>
         </DialogContent>
       </Dialog>
@@ -153,11 +165,9 @@ function RuleSnapshotDialog({ ruleSnapshot }: { ruleSnapshot: string | null | un
         <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2 text-lg">
             <Shield className="h-5 w-5" />
-            {String(ruleData.name || 'Unknown Rule')}
+            {String(ruleData.name || "Unknown Rule")}
           </DialogTitle>
-          <DialogDescription>
-            Rule snapshot at execution time
-          </DialogDescription>
+          <DialogDescription>Rule snapshot at execution time</DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto pr-2 space-y-4">
@@ -166,59 +176,83 @@ function RuleSnapshotDialog({ ruleSnapshot }: { ruleSnapshot: string | null | un
             <Badge variant="outline" className="font-mono">
               v{String(ruleData.version || 1)}
             </Badge>
-            <Badge className={severityColors[ruleData.criticality as Criticality]}>
-              {String(ruleData.criticality || 'N/A')}
+            <Badge
+              className={severityColors[ruleData.criticality as Criticality]}
+            >
+              {String(ruleData.criticality || "N/A")}
             </Badge>
-            <Badge variant={ruleData.is_active ? 'default' : 'secondary'}>
-              {ruleData.is_active ? 'Active' : 'Inactive'}
+            <Badge variant={ruleData.is_active ? "default" : "secondary"}>
+              {ruleData.is_active ? "Active" : "Inactive"}
             </Badge>
             {ruleData.kind ? (
-              <Badge variant="outline">
-                {String(ruleData.kind)}
-              </Badge>
+              <Badge variant="outline">{String(ruleData.kind)}</Badge>
             ) : null}
           </div>
 
           {/* Description */}
           {ruleData.description ? (
             <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-foreground">Description</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">{String(ruleData.description)}</p>
+              <h3 className="text-sm font-semibold text-foreground">
+                Description
+              </h3>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                {String(ruleData.description)}
+              </p>
             </div>
           ) : null}
 
           {/* Metadata Grid */}
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1 p-3 bg-muted/50 rounded-lg">
-              <p className="text-xs font-medium text-muted-foreground">Created By</p>
-              <p className="text-sm font-mono break-all">{String(ruleData.created_by || 'Unknown')}</p>
-            </div>
-
-            <div className="space-y-1 p-3 bg-muted/50 rounded-lg">
-              <p className="text-xs font-medium text-muted-foreground">Created At</p>
-              <p className="text-sm">
-                {formatDate(ruleData.created_at, 'MMM d, yyyy HH:mm:ss', 'Unknown')}
+              <p className="text-xs font-medium text-muted-foreground">
+                Created By
+              </p>
+              <p className="text-sm font-mono break-all">
+                {String(ruleData.created_by || "Unknown")}
               </p>
             </div>
 
             <div className="space-y-1 p-3 bg-muted/50 rounded-lg">
-              <p className="text-xs font-medium text-muted-foreground">Rule ID</p>
-              <p className="text-xs font-mono break-all">{String(ruleData.id || 'N/A')}</p>
+              <p className="text-xs font-medium text-muted-foreground">
+                Created At
+              </p>
+              <p className="text-sm">
+                {formatDate(
+                  ruleData.created_at,
+                  "MMM d, yyyy HH:mm:ss",
+                  "Unknown",
+                )}
+              </p>
             </div>
 
             <div className="space-y-1 p-3 bg-muted/50 rounded-lg">
-              <p className="text-xs font-medium text-muted-foreground">Family ID</p>
-              <p className="text-xs font-mono break-all">{String(ruleData.rule_family_id || 'N/A')}</p>
+              <p className="text-xs font-medium text-muted-foreground">
+                Rule ID
+              </p>
+              <p className="text-xs font-mono break-all">
+                {String(ruleData.id || "N/A")}
+              </p>
+            </div>
+
+            <div className="space-y-1 p-3 bg-muted/50 rounded-lg">
+              <p className="text-xs font-medium text-muted-foreground">
+                Family ID
+              </p>
+              <p className="text-xs font-mono break-all">
+                {String(ruleData.rule_family_id || "N/A")}
+              </p>
             </div>
           </div>
 
           {/* Target Columns */}
           {ruleData.target_columns ? (
             <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-foreground">Target Columns</h3>
+              <h3 className="text-sm font-semibold text-foreground">
+                Target Columns
+              </h3>
               <div className="bg-muted p-3 rounded-lg">
                 <code className="text-sm break-words">
-                  {typeof ruleData.target_columns === 'string'
+                  {typeof ruleData.target_columns === "string"
                     ? ruleData.target_columns
                     : JSON.stringify(ruleData.target_columns)}
                 </code>
@@ -229,10 +263,12 @@ function RuleSnapshotDialog({ ruleSnapshot }: { ruleSnapshot: string | null | un
           {/* Parameters */}
           {ruleData.params ? (
             <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-foreground">Parameters</h3>
+              <h3 className="text-sm font-semibold text-foreground">
+                Parameters
+              </h3>
               <div className="bg-muted p-4 rounded-lg overflow-x-auto">
                 <pre className="text-xs leading-relaxed">
-                  {typeof ruleData.params === 'string'
+                  {typeof ruleData.params === "string"
                     ? ruleData.params
                     : JSON.stringify(ruleData.params, null, 2)}
                 </pre>
@@ -245,9 +281,12 @@ function RuleSnapshotDialog({ ruleSnapshot }: { ruleSnapshot: string | null | un
             <div className="flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
               <div className="flex-1 space-y-1">
-                <p className="text-sm text-yellow-800 font-semibold">Historical Snapshot</p>
+                <p className="text-sm text-yellow-800 font-semibold">
+                  Historical Snapshot
+                </p>
                 <p className="text-sm text-yellow-700">
-                  This is the rule configuration at the time of execution. The current version may differ, or the rule may have been deleted.
+                  This is the rule configuration at the time of execution. The
+                  current version may differ, or the rule may have been deleted.
                 </p>
               </div>
             </div>
@@ -274,6 +313,10 @@ export default function ExecutionDetailPage() {
   const { data: qualityMetrics, isLoading: metricsLoading } =
     useExecutionQualityMetrics(executionId);
   const cancelExecution = useCancelExecution();
+  const [drillDown, setDrillDown] = useStateDrillDown<{
+    column: string;
+    ruleName: string;
+  } | null>(null);
 
   const handleCancel = () => {
     if (confirm("Are you sure you want to cancel this execution?")) {
@@ -287,11 +330,7 @@ export default function ExecutionDetailPage() {
   if (executionLoading) {
     return (
       <MainLayout>
-        <div className="flex items-center justify-center h-64">
-          <div className="text-muted-foreground">
-            Loading execution details...
-          </div>
-        </div>
+        <LoadingState rows={3} message="Loading execution details..." className="max-w-2xl mx-auto mt-8" />
       </MainLayout>
     );
   }
@@ -299,12 +338,10 @@ export default function ExecutionDetailPage() {
   if (executionError || !execution) {
     return (
       <MainLayout>
-        <div className="flex items-center justify-center h-64">
-          <div className="text-red-600">
-            Error loading execution:{" "}
-            {executionError?.message || "Execution not found"}
-          </div>
-        </div>
+        <ErrorState
+          message={executionError?.message || "Execution not found"}
+          className="max-w-md mx-auto mt-8"
+        />
       </MainLayout>
     );
   }
@@ -317,12 +354,16 @@ export default function ExecutionDetailPage() {
       return Math.round(summary.duration_seconds);
     }
     // Fallback to calculating from timestamps
-    if (execution.finished_at && execution.started_at &&
-        isValidDate(execution.finished_at) && isValidDate(execution.started_at)) {
+    if (
+      execution.finished_at &&
+      execution.started_at &&
+      isValidDate(execution.finished_at) &&
+      isValidDate(execution.started_at)
+    ) {
       return Math.round(
         (new Date(execution.finished_at).getTime() -
           new Date(execution.started_at).getTime()) /
-          1000
+          1000,
       );
     }
     return null;
@@ -343,7 +384,7 @@ export default function ExecutionDetailPage() {
             </Button>
             <div>
               <h1 className="text-3xl font-bold flex items-center gap-2">
-                <Activity className="h-8 w-8" />
+                <Activity className="h-6 w-6" />
                 Execution Details
               </h1>
               <p className="text-muted-foreground mt-2 font-mono">
@@ -392,8 +433,8 @@ export default function ExecutionDetailPage() {
                   {duration
                     ? `${duration}s`
                     : execution.status === "running"
-                    ? "Running..."
-                    : "N/A"}
+                      ? "Running..."
+                      : "N/A"}
                 </div>
               </div>
 
@@ -425,11 +466,23 @@ export default function ExecutionDetailPage() {
               <div className="flex items-center justify-between text-sm">
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Clock className="h-3.5 w-3.5" />
-                  <span>Started: {formatDateInTimezone(execution.started_at, userTimezone, "MMM d, HH:mm:ss")}</span>
+                  <span>
+                    Started:{" "}
+                    {formatDateInTimezone(
+                      execution.started_at,
+                      userTimezone,
+                      "MMM d, HH:mm:ss",
+                    )}
+                  </span>
                 </div>
                 {execution.finished_at && (
                   <span className="text-muted-foreground">
-                    Finished: {formatDateInTimezone(execution.finished_at, userTimezone, "MMM d, HH:mm:ss")}
+                    Finished:{" "}
+                    {formatDateInTimezone(
+                      execution.finished_at,
+                      userTimezone,
+                      "MMM d, HH:mm:ss",
+                    )}
                   </span>
                 )}
               </div>
@@ -437,9 +490,7 @@ export default function ExecutionDetailPage() {
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm text-muted-foreground">
                     <span>Processing...</span>
-                    <span>
-                      {formatRelativeTime(execution.started_at)}
-                    </span>
+                    <span>{formatRelativeTime(execution.started_at)}</span>
                   </div>
                   <Progress value={undefined} className="animate-pulse h-1.5" />
                 </div>
@@ -450,31 +501,31 @@ export default function ExecutionDetailPage() {
 
         {/* Tabs for Summary and Rules Performance */}
         <Tabs defaultValue="summary" className="space-y-4">
-          <TabsList className="w-full grid grid-cols-2">
+          <TabsList className="w-full grid grid-cols-4">
             <TabsTrigger value="summary">Summary</TabsTrigger>
+            <TabsTrigger value="heatmap">Heatmap</TabsTrigger>
+            <TabsTrigger value="timeline">Timeline</TabsTrigger>
             <TabsTrigger value="rules">Rules Performance</TabsTrigger>
           </TabsList>
 
           <TabsContent value="summary" className="space-y-4">
             {summaryLoading ? (
-              <Card>
-                <CardContent className="flex items-center justify-center h-32">
-                  <div className="text-muted-foreground">
-                    Loading summary...
-                  </div>
-                </CardContent>
-              </Card>
+              <LoadingState rows={2} message="Loading summary..." />
             ) : summary ? (
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle>Execution Summary</CardTitle>
-                  <CardDescription>Complete overview of data processing results</CardDescription>
+                  <CardDescription>
+                    Complete overview of data processing results
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="grid gap-6 md:grid-cols-3">
                     {/* Data Processing Stats */}
                     <div className="space-y-3">
-                      <h3 className="text-sm font-semibold text-muted-foreground">Data Processed</h3>
+                      <h3 className="text-sm font-semibold text-muted-foreground">
+                        Data Processed
+                      </h3>
                       <div className="space-y-2">
                         <div className="flex justify-between items-baseline">
                           <span className="text-sm">Total Rows</span>
@@ -499,7 +550,9 @@ export default function ExecutionDetailPage() {
 
                     {/* Issues by Severity */}
                     <div className="space-y-3">
-                      <h3 className="text-sm font-semibold text-muted-foreground">Issues by Severity</h3>
+                      <h3 className="text-sm font-semibold text-muted-foreground">
+                        Issues by Severity
+                      </h3>
                       {summary.issues_by_severity &&
                       Object.keys(summary.issues_by_severity).length > 0 ? (
                         <div className="space-y-2">
@@ -516,9 +569,11 @@ export default function ExecutionDetailPage() {
                                 >
                                   {severity}
                                 </Badge>
-                                <span className="text-lg font-bold">{String(count)}</span>
+                                <span className="text-lg font-bold">
+                                  {String(count)}
+                                </span>
                               </div>
-                            )
+                            ),
                           )}
                         </div>
                       ) : (
@@ -531,7 +586,9 @@ export default function ExecutionDetailPage() {
 
                     {/* Additional Metrics */}
                     <div className="space-y-3">
-                      <h3 className="text-sm font-semibold text-muted-foreground">Performance</h3>
+                      <h3 className="text-sm font-semibold text-muted-foreground">
+                        Performance
+                      </h3>
                       <div className="space-y-2">
                         <div className="flex justify-between items-baseline">
                           <span className="text-sm">Execution Time</span>
@@ -549,7 +606,9 @@ export default function ExecutionDetailPage() {
                           <div className="flex justify-between items-baseline">
                             <span className="text-sm">Rows/sec</span>
                             <span className="text-lg font-bold text-blue-600">
-                              {Math.round(summary.total_rows / duration).toLocaleString()}
+                              {Math.round(
+                                summary.total_rows / duration,
+                              ).toLocaleString()}
                             </span>
                           </div>
                         )}
@@ -559,13 +618,48 @@ export default function ExecutionDetailPage() {
                 </CardContent>
               </Card>
             ) : (
-              <Card>
-                <CardContent className="flex items-center justify-center h-32">
-                  <div className="text-muted-foreground">
-                    No summary available
-                  </div>
-                </CardContent>
-              </Card>
+              <EmptyState title="No summary available" description="Summary data is not available for this execution." />
+            )}
+          </TabsContent>
+
+          <TabsContent value="heatmap" className="space-y-4">
+            {summary?.rule_performance && issues.length > 0 ? (
+              <>
+                <ExecutionHeatmap
+                  rulePerformance={summary.rule_performance}
+                  issues={issues}
+                  onCellClick={(column, ruleName) =>
+                    setDrillDown({ column, ruleName })
+                  }
+                />
+                {drillDown && (
+                  <ExecutionDrillDown
+                    column={drillDown.column}
+                    ruleName={drillDown.ruleName}
+                    issues={issues}
+                    onClose={() => setDrillDown(null)}
+                  />
+                )}
+              </>
+            ) : (
+              issuesLoading || summaryLoading
+                ? <LoadingState rows={2} message="Loading heatmap data..." />
+                : <EmptyState title="No heatmap data" description="No data available for heatmap visualization." />
+            )}
+          </TabsContent>
+
+          <TabsContent value="timeline" className="space-y-4">
+            {summary?.rule_performance ? (
+              <ExecutionTimeline
+                rulePerformance={summary.rule_performance}
+                startedAt={execution.started_at}
+                finishedAt={execution.finished_at}
+                durationSeconds={duration ?? undefined}
+              />
+            ) : (
+              summaryLoading
+                ? <LoadingState rows={2} message="Loading timeline data..." />
+                : <EmptyState title="No timeline data" description="No timeline data available." />
             )}
           </TabsContent>
 
@@ -574,7 +668,8 @@ export default function ExecutionDetailPage() {
               <CardHeader>
                 <CardTitle>Rule Performance</CardTitle>
                 <CardDescription>
-                  Performance details for each rule in this execution (showing rule state at execution time)
+                  Performance details for each rule in this execution (showing
+                  rule state at execution time)
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -607,10 +702,12 @@ export default function ExecutionDetailPage() {
                           let ruleData: RuleSnapshotData | null = null;
                           try {
                             if (rulePerf.rule_snapshot) {
-                              ruleData = JSON.parse(rulePerf.rule_snapshot) as RuleSnapshotData;
+                              ruleData = JSON.parse(
+                                rulePerf.rule_snapshot,
+                              ) as RuleSnapshotData;
                             }
                           } catch {
-                            console.error('Failed to parse rule snapshot');
+                            console.error("Failed to parse rule snapshot");
                           }
 
                           return (
@@ -618,10 +715,13 @@ export default function ExecutionDetailPage() {
                               <TableCell>
                                 <div>
                                   <div className="font-medium">
-                                    {ruleData?.name || 'Unknown Rule'}
+                                    {ruleData?.name || "Unknown Rule"}
                                   </div>
                                   {!rulePerf.rule_id && (
-                                    <Badge variant="outline" className="text-xs mt-1">
+                                    <Badge
+                                      variant="outline"
+                                      className="text-xs mt-1"
+                                    >
                                       Deleted
                                     </Badge>
                                   )}
@@ -629,11 +729,16 @@ export default function ExecutionDetailPage() {
                               </TableCell>
                               <TableCell>
                                 {ruleData?.version ? (
-                                  <Badge variant="outline" className="font-mono">
+                                  <Badge
+                                    variant="outline"
+                                    className="font-mono"
+                                  >
                                     v{ruleData.version}
                                   </Badge>
                                 ) : (
-                                  <span className="text-muted-foreground text-sm">N/A</span>
+                                  <span className="text-muted-foreground text-sm">
+                                    N/A
+                                  </span>
                                 )}
                               </TableCell>
                               <TableCell>
@@ -642,16 +747,26 @@ export default function ExecutionDetailPage() {
                                     {ruleData.kind}
                                   </Badge>
                                 ) : (
-                                  <span className="text-muted-foreground text-sm">N/A</span>
+                                  <span className="text-muted-foreground text-sm">
+                                    N/A
+                                  </span>
                                 )}
                               </TableCell>
                               <TableCell>
                                 {ruleData?.criticality ? (
-                                  <Badge className={severityColors[ruleData.criticality as Criticality]}>
+                                  <Badge
+                                    className={
+                                      severityColors[
+                                        ruleData.criticality as Criticality
+                                      ]
+                                    }
+                                  >
                                     {ruleData.criticality}
                                   </Badge>
                                 ) : (
-                                  <span className="text-muted-foreground text-sm">N/A</span>
+                                  <span className="text-muted-foreground text-sm">
+                                    N/A
+                                  </span>
                                 )}
                               </TableCell>
                               <TableCell>
@@ -666,35 +781,41 @@ export default function ExecutionDetailPage() {
                                 </Badge>
                               </TableCell>
                               <TableCell>
-                                <span className="font-medium">{rulePerf.rows_flagged}</span>
+                                <span className="font-medium">
+                                  {rulePerf.rows_flagged}
+                                </span>
                               </TableCell>
                               <TableCell>
                                 {ruleData?.is_active ? (
-                                  <Badge variant="default" className="text-xs">Active</Badge>
+                                  <Badge variant="default" className="text-xs">
+                                    Active
+                                  </Badge>
                                 ) : (
-                                  <Badge variant="secondary" className="text-xs">Inactive</Badge>
+                                  <Badge
+                                    variant="secondary"
+                                    className="text-xs"
+                                  >
+                                    Inactive
+                                  </Badge>
                                 )}
                               </TableCell>
                               <TableCell className="text-right">
-                                <RuleSnapshotDialog ruleSnapshot={rulePerf.rule_snapshot} />
+                                <RuleSnapshotDialog
+                                  ruleSnapshot={rulePerf.rule_snapshot}
+                                />
                               </TableCell>
                             </TableRow>
                           );
-                        }
+                        },
                       )}
                     </TableBody>
                   </Table>
                 ) : (
-                  <div className="text-center py-8">
-                    <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <h3 className="text-lg font-medium mb-2">
-                      No Rule Performance Data
-                    </h3>
-                    <p className="text-muted-foreground">
-                      Rule performance details are not available for this
-                      execution.
-                    </p>
-                  </div>
+                  <EmptyState
+                    icon={FileText}
+                    title="No Rule Performance Data"
+                    description="Rule performance details are not available for this execution."
+                  />
                 )}
               </CardContent>
             </Card>
@@ -704,28 +825,22 @@ export default function ExecutionDetailPage() {
         {/* Issues Section - Always Visible */}
         <Card>
           <CardHeader>
-            <CardTitle>Issues Found ({issuesLoading ? '...' : issues.length})</CardTitle>
+            <CardTitle>
+              Issues Found ({issuesLoading ? "..." : issues.length})
+            </CardTitle>
             <CardDescription>
               Data quality issues discovered during execution
             </CardDescription>
           </CardHeader>
           <CardContent>
             {issuesLoading ? (
-              <div className="flex items-center justify-center h-32">
-                <div className="text-muted-foreground">
-                  Loading issues...
-                </div>
-              </div>
+              <LoadingState rows={3} message="Loading issues..." />
             ) : issues.length === 0 ? (
-              <div className="text-center py-8">
-                <CheckCircle className="h-12 w-12 text-green-600 mx-auto mb-4" />
-                <h3 className="text-lg font-medium mb-2">
-                  No Issues Found
-                </h3>
-                <p className="text-muted-foreground">
-                  All data quality rules passed successfully!
-                </p>
-              </div>
+              <EmptyState
+                icon={CheckCircle}
+                title="No Issues Found"
+                description="All data quality rules passed successfully!"
+              />
             ) : (
               <div className="overflow-x-auto">
                 <Table>
@@ -745,14 +860,19 @@ export default function ExecutionDetailPage() {
                       let ruleData: RuleSnapshotData | null = null;
                       try {
                         if (issue.rule_snapshot) {
-                          ruleData = JSON.parse(issue.rule_snapshot) as RuleSnapshotData;
+                          ruleData = JSON.parse(
+                            issue.rule_snapshot,
+                          ) as RuleSnapshotData;
                         }
                       } catch {
-                        console.error('Failed to parse issue rule snapshot');
+                        console.error("Failed to parse issue rule snapshot");
                       }
 
                       // Get rule name from snapshot or fallback to rule_name field
-                      const ruleName = ruleData?.name || (issue as Issue & { rule_name?: string }).rule_name || 'Unknown';
+                      const ruleName =
+                        ruleData?.name ||
+                        (issue as Issue & { rule_name?: string }).rule_name ||
+                        "Unknown";
                       const ruleVersion = ruleData?.version;
 
                       return (
@@ -765,9 +885,14 @@ export default function ExecutionDetailPage() {
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-col gap-1">
-                              <span className="text-sm font-medium">{ruleName}</span>
+                              <span className="text-sm font-medium">
+                                {ruleName}
+                              </span>
                               {ruleVersion && (
-                                <Badge variant="outline" className="font-mono text-xs w-fit">
+                                <Badge
+                                  variant="outline"
+                                  className="font-mono text-xs w-fit"
+                                >
                                   v{ruleVersion}
                                 </Badge>
                               )}

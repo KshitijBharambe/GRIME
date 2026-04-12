@@ -1,16 +1,22 @@
-'use client'
+"use client";
 
-import { useState, useEffect } from 'react'
-import { useSession } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
-import { Textarea } from '@/components/ui/textarea'
+import { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -18,51 +24,62 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
-import { User, Mail, Shield, Loader2, Save, AlertCircle, Key, FileText, CheckCircle } from 'lucide-react'
-import apiClient from '@/lib/api'
-import { MainLayout } from '@/components/layout/main-layout'
+} from "@/components/ui/dialog";
+import {
+  User,
+  Mail,
+  Shield,
+  Loader2,
+  Save,
+  AlertCircle,
+  Key,
+  FileText,
+  CheckCircle,
+} from "lucide-react";
+import apiClient from "@/lib/api";
+import { MainLayout } from "@/components/layout/main-layout";
 
 export default function UserProfilePage() {
-  const { data: session, update } = useSession()
-  const router = useRouter()
-  const [isLoading, setIsLoading] = useState(false)
-  const [isSaving, setIsSaving] = useState(false)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
+  const { data: session, update } = useSession();
+  const router = useRouter();
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   // Form state - initialize from session
-  const [name, setName] = useState(session?.user?.name || '')
-  const [email, setEmail] = useState(session?.user?.email || '')
+  const [name, setName] = useState(session?.user?.name || "");
+  const [email, setEmail] = useState(session?.user?.email || "");
 
   // Password change request state
-  const [showPasswordDialog, setShowPasswordDialog] = useState(false)
-  const [newPassword, setNewPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [reason, setReason] = useState('')
-  const [isSubmittingRequest, setIsSubmittingRequest] = useState(false)
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [reason, setReason] = useState("");
+  const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
 
-  const isOwner = session?.user?.role === 'owner'
-  const isAdmin = session?.user?.role === 'admin'
-  const isAnalystOrViewer = session?.user?.role === 'analyst' || session?.user?.role === 'viewer'
+  const isOwner = session?.user?.role === "owner";
+  const isAdmin = session?.user?.role === "admin";
+  const isAnalystOrViewer =
+    session?.user?.role === "analyst" || session?.user?.role === "viewer";
 
   // Update form when session changes
   useEffect(() => {
     if (session?.user) {
-      setName(session.user.name || '')
-      setEmail(session.user.email || '')
+      setName(session.user.name || "");
+      setEmail(session.user.email || "");
     }
-  }, [session])
+  }, [session]);
 
   const handleSaveProfile = async () => {
     if (!name || !email) {
-      setError('Please fill in all required fields')
-      return
+      setError("Please fill in all required fields");
+      return;
     }
 
-    setIsSaving(true)
-    setError('')
-    setSuccess('')
+    setIsSaving(true);
+    setError("");
+    setSuccess("");
 
     try {
       // Note: This assumes there's an endpoint to update user profile
@@ -70,83 +87,86 @@ export default function UserProfilePage() {
       const response = await apiClient.put(`/auth/me`, {
         name,
         email,
-      })
-      setUser(response.data)
-      setSuccess('Profile updated successfully')
+      });
+      setSuccess("Profile updated successfully");
 
       // Update session with new name
-      await update({ name })
+      await update({ name });
     } catch (err: unknown) {
-      const error = err as { response?: { data?: { detail?: string } } }
-      setError(error.response?.data?.detail || 'Failed to update profile')
+      const error = err as { response?: { data?: { detail?: string } } };
+      setError(error.response?.data?.detail || "Failed to update profile");
     } finally {
-      setIsSaving(false)
+      setIsSaving(false);
     }
-  }
+  };
 
   const handlePasswordChangeRequest = async () => {
     if (!newPassword || !confirmPassword) {
-      setError('Please fill in all password fields')
-      return
+      setError("Please fill in all password fields");
+      return;
     }
 
     if (newPassword !== confirmPassword) {
-      setError('New passwords do not match')
-      return
+      setError("New passwords do not match");
+      return;
     }
 
     if (newPassword.length < 8) {
-      setError('Password must be at least 8 characters long')
-      return
+      setError("Password must be at least 8 characters long");
+      return;
     }
 
-    setIsSubmittingRequest(true)
-    setError('')
-    setSuccess('')
+    setIsSubmittingRequest(true);
+    setError("");
+    setSuccess("");
 
     try {
       if (isOwner) {
         // Owners can change password directly
         await apiClient.post(`/auth/change-password`, {
           new_password: newPassword,
-        })
-        setSuccess('Password changed successfully')
+        });
+        setSuccess("Password changed successfully");
       } else {
         // Non-owners must submit a request
         // Replace with: await apiClient.requestPasswordChange({ new_password: newPassword, reason })
-        await new Promise(resolve => setTimeout(resolve, 1000)) // Mock delay
+        await new Promise((resolve) => setTimeout(resolve, 1000)); // Mock delay
 
         setSuccess(
           isAdmin
-            ? 'Password change request submitted. Awaiting approval from an Owner.'
-            : 'Password change request submitted. Awaiting approval from an Admin or Owner.'
-        )
+            ? "Password change request submitted. Awaiting approval from an Owner."
+            : "Password change request submitted. Awaiting approval from an Admin or Owner.",
+        );
       }
 
-      setShowPasswordDialog(false)
-      setNewPassword('')
-      setConfirmPassword('')
-      setReason('')
+      setShowPasswordDialog(false);
+      setNewPassword("");
+      setConfirmPassword("");
+      setReason("");
     } catch (err: unknown) {
-      const error = err as { response?: { data?: { detail?: string } } }
-      setError(error.response?.data?.detail || 'Failed to submit password change request')
+      const error = err as { response?: { data?: { detail?: string } } };
+      setError(
+        error.response?.data?.detail ||
+          "Failed to submit password change request",
+      );
     } finally {
-      setIsSubmittingRequest(false)
+      setIsSubmittingRequest(false);
     }
-  }
+  };
 
   const handleCancel = () => {
     if (session?.user) {
-      setName(session.user.name || '')
-      setEmail(session.user.email || '')
-      setError('')
-      setSuccess('')
+      setName(session.user.name || "");
+      setEmail(session.user.email || "");
+      setError("");
+      setSuccess("");
     }
-  }
+  };
 
   const hasChanges =
     session?.user &&
-    (name !== (session.user.name || '') || email !== (session.user.email || ''))
+    (name !== (session.user.name || "") ||
+      email !== (session.user.email || ""));
 
   return (
     <MainLayout>
@@ -179,9 +199,7 @@ export default function UserProfilePage() {
         <Card>
           <CardHeader>
             <CardTitle>Profile Information</CardTitle>
-            <CardDescription>
-              Update your personal information
-            </CardDescription>
+            <CardDescription>Update your personal information</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Name */}
@@ -238,9 +256,7 @@ export default function UserProfilePage() {
         <Card>
           <CardHeader>
             <CardTitle>Account Details</CardTitle>
-            <CardDescription>
-              View your account information
-            </CardDescription>
+            <CardDescription>View your account information</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {/* Role */}
@@ -250,7 +266,7 @@ export default function UserProfilePage() {
                 <span className="text-sm font-medium">Role</span>
               </div>
               <Badge variant="outline" className="capitalize">
-                {session?.user?.role || 'N/A'}
+                {session?.user?.role || "N/A"}
               </Badge>
             </div>
 
@@ -263,7 +279,7 @@ export default function UserProfilePage() {
                 <span className="text-sm font-medium">Organization</span>
               </div>
               <span className="text-sm text-muted-foreground">
-                {session?.user?.organizationName || 'N/A'}
+                {session?.user?.organizationName || "N/A"}
               </span>
             </div>
           </CardContent>
@@ -275,8 +291,8 @@ export default function UserProfilePage() {
             <CardTitle>Security</CardTitle>
             <CardDescription>
               {isOwner
-                ? 'Update your password to keep your account secure'
-                : 'Request a password change (requires approval)'}
+                ? "Update your password to keep your account secure"
+                : "Request a password change (requires approval)"}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -286,8 +302,8 @@ export default function UserProfilePage() {
                 <Key className="h-4 w-4" />
                 <AlertDescription>
                   {isAdmin
-                    ? 'As an Admin, password changes require approval from an Organization Owner.'
-                    : 'Password changes require approval from an Admin or Owner. Submit a request below.'}
+                    ? "As an Admin, password changes require approval from an Organization Owner."
+                    : "Password changes require approval from an Admin or Owner. Submit a request below."}
                 </AlertDescription>
               </Alert>
             )}
@@ -297,12 +313,14 @@ export default function UserProfilePage() {
               <div>
                 <p className="font-medium">Password</p>
                 <p className="text-sm text-muted-foreground">
-                  {isOwner ? 'Change your account password' : 'Request to change your password'}
+                  {isOwner
+                    ? "Change your account password"
+                    : "Request to change your password"}
                 </p>
               </div>
               <Button onClick={() => setShowPasswordDialog(true)}>
                 <Key className="mr-2 h-4 w-4" />
-                {isOwner ? 'Change Password' : 'Request Password Change'}
+                {isOwner ? "Change Password" : "Request Password Change"}
               </Button>
             </div>
 
@@ -318,7 +336,7 @@ export default function UserProfilePage() {
               </div>
               <Button
                 variant="outline"
-                onClick={() => router.push('/dashboard/requests')}
+                onClick={() => router.push("/dashboard/requests")}
               >
                 <FileText className="mr-2 h-4 w-4" />
                 View Requests
@@ -332,12 +350,12 @@ export default function UserProfilePage() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>
-                {isOwner ? 'Change Password' : 'Request Password Change'}
+                {isOwner ? "Change Password" : "Request Password Change"}
               </DialogTitle>
               <DialogDescription>
                 {isOwner
-                  ? 'Enter your new password below'
-                  : 'Submit a request to change your password. This will require approval.'}
+                  ? "Enter your new password below"
+                  : "Submit a request to change your password. This will require approval."}
               </DialogDescription>
             </DialogHeader>
 
@@ -359,7 +377,9 @@ export default function UserProfilePage() {
 
               {/* Confirm Password */}
               <div className="space-y-2">
-                <Label htmlFor="dialog-confirmPassword">Confirm New Password</Label>
+                <Label htmlFor="dialog-confirmPassword">
+                  Confirm New Password
+                </Label>
                 <Input
                   id="dialog-confirmPassword"
                   type="password"
@@ -389,8 +409,8 @@ export default function UserProfilePage() {
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>
                     {isAdmin
-                      ? 'Your request will be sent to Organization Owners for approval.'
-                      : 'Your request will be sent to Admins and Owners for approval.'}
+                      ? "Your request will be sent to Organization Owners for approval."
+                      : "Your request will be sent to Admins and Owners for approval."}
                   </AlertDescription>
                 </Alert>
               )}
@@ -400,10 +420,10 @@ export default function UserProfilePage() {
               <Button
                 variant="outline"
                 onClick={() => {
-                  setShowPasswordDialog(false)
-                  setNewPassword('')
-                  setConfirmPassword('')
-                  setReason('')
+                  setShowPasswordDialog(false);
+                  setNewPassword("");
+                  setConfirmPassword("");
+                  setReason("");
                 }}
                 disabled={isSubmittingRequest}
               >
@@ -411,9 +431,13 @@ export default function UserProfilePage() {
               </Button>
               <Button
                 onClick={handlePasswordChangeRequest}
-                disabled={!newPassword || !confirmPassword || isSubmittingRequest}
+                disabled={
+                  !newPassword || !confirmPassword || isSubmittingRequest
+                }
               >
-                {isSubmittingRequest && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isSubmittingRequest && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
                 {isOwner ? (
                   <>
                     <CheckCircle className="mr-2 h-4 w-4" />
@@ -431,5 +455,5 @@ export default function UserProfilePage() {
         </Dialog>
       </div>
     </MainLayout>
-  )
+  );
 }

@@ -9,14 +9,8 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Upload,
-  Play,
-  Clock,
-  Database,
-} from "lucide-react";
+import { Upload, Play, Clock, Database } from "lucide-react";
 import { useDashboardOverview } from "@/lib/hooks/useDashboard";
-import { MagicBentoWrapper } from "@/components/MagicBentoWrapper";
 import { formatRelativeTime } from "@/lib/utils/date";
 
 interface ActivityItem {
@@ -43,7 +37,7 @@ function getActivityIcon(type: ActivityItem["type"]) {
 }
 
 function getStatusVariant(
-  status?: ActivityItem["status"]
+  status?: ActivityItem["status"],
 ): "default" | "secondary" | "destructive" | "outline" {
   switch (status) {
     case "success":
@@ -73,7 +67,7 @@ export function RecentActivity() {
           <div className="space-y-4">
             {[...Array(3)].map((_, index) => (
               <div
-                key={index}
+                key={`skeleton-activity-${index}`}
                 className="flex items-start space-x-3 p-3 rounded-lg border"
               >
                 <div className="h-8 w-8 bg-muted animate-pulse rounded-full" />
@@ -131,27 +125,15 @@ export function RecentActivity() {
         execution.status === "succeeded"
           ? ("success" as const)
           : execution.status === "failed"
-          ? ("error" as const)
-          : ("warning" as const),
+            ? ("error" as const)
+            : ("warning" as const),
     })),
   ]
     .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
     .slice(0, 5);
 
   return (
-    <MagicBentoWrapper
-      textAutoHide={true}
-      enableStars={false}
-      enableSpotlight={true}
-      enableBorderGlow={true}
-      enableTilt={false}
-      enableMagnetism={false}
-      clickEffect={true}
-      spotlightRadius={300}
-      particleCount={12}
-      glowColor="132, 0, 255"
-      gridColumns="grid-cols-1"
-    >
+    <>
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -203,9 +185,7 @@ export function RecentActivity() {
 
                     <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
                       {activity.user && <span>{activity.user}</span>}
-                      <span>
-                        {formatRelativeTime(activity.timestamp)}
-                      </span>
+                      <span>{formatRelativeTime(activity.timestamp)}</span>
                     </div>
                   </div>
                 </div>
@@ -214,6 +194,6 @@ export function RecentActivity() {
           )}
         </CardContent>
       </Card>
-    </MagicBentoWrapper>
+    </>
   );
 }

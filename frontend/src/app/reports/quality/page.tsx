@@ -168,12 +168,12 @@ export default function QualityReportsPage() {
           <CardContent className="space-y-4">
             <div className="grid gap-4 md:grid-cols-3">
               <div className="space-y-2">
-                <label className="text-sm font-medium">Dataset</label>
+                <label htmlFor="filter-dataset" className="text-sm font-medium">Dataset</label>
                 <Select
                   value={selectedDataset}
                   onValueChange={setSelectedDataset}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="filter-dataset">
                     <SelectValue placeholder="Select dataset" />
                   </SelectTrigger>
                   <SelectContent>
@@ -187,9 +187,9 @@ export default function QualityReportsPage() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Time Range</label>
+                <label htmlFor="filter-timerange" className="text-sm font-medium">Time Range</label>
                 <Select value={timeRange} onValueChange={setTimeRange}>
-                  <SelectTrigger>
+                  <SelectTrigger id="filter-timerange">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -452,12 +452,14 @@ export default function QualityReportsPage() {
                     {allDatasetsData.map((dataset) => {
                       const qualityScore = dataset.quality_score || 0;
                       const issueCount = dataset.total_issues || 0;
-                      const badgeVariant =
-                        issueCount === 0
-                          ? "outline"
-                          : issueCount < 5
-                          ? "secondary"
-                          : "destructive";
+                      let badgeVariant: "outline" | "secondary" | "destructive";
+                      if (issueCount === 0) {
+                        badgeVariant = "outline";
+                      } else if (issueCount < 5) {
+                        badgeVariant = "secondary";
+                      } else {
+                        badgeVariant = "destructive";
+                      }
 
                       return (
                         <div
@@ -555,13 +557,12 @@ export default function QualityReportsPage() {
                                     ? "destructive"
                                     : "outline"
                                 }
-                                className={`w-2 h-2 p-0 rounded-full ${
-                                  severity === "high"
-                                    ? "bg-orange-500"
-                                    : severity === "medium"
-                                    ? "bg-yellow-500"
-                                    : ""
-                                }`}
+                                className={(() => {
+                                  const baseClass = "w-2 h-2 p-0 rounded-full";
+                                  if (severity === "high") return `${baseClass} bg-orange-500`;
+                                  if (severity === "medium") return `${baseClass} bg-yellow-500`;
+                                  return baseClass;
+                                })()}
                               />
                               <span className="text-sm capitalize">
                                 {severity}

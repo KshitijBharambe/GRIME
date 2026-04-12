@@ -3,18 +3,11 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import apiClient from "@/lib/api";
 import { Execution, ExecutionCreate, PaginatedResponse, QualityMetrics } from "@/types/api";
-
-// Query keys
-const QUERY_KEYS = {
-  executions: ["executions"] as const,
-  execution: (id: string) => ["execution", id] as const,
-  executionSummary: (id: string) => ["execution", id, "summary"] as const,
-  executionIssues: (id: string) => ["execution", id, "issues"] as const,
-  executionQualityMetrics: (id: string) => ["execution", id, "quality-metrics"] as const,
-};
+import { QUERY_KEYS } from "@/lib/constants/queryKeys";
+import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
 
 // Hooks for executions
-export function useExecutions(page: number = 1, size: number = 20) {
+export function useExecutions(page: number = 1, size: number = DEFAULT_PAGE_SIZE) {
   return useQuery<PaginatedResponse<Execution>>({
     queryKey: [...QUERY_KEYS.executions, page, size],
     queryFn: () => apiClient.getExecutions(page, size),

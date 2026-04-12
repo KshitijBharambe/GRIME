@@ -1,17 +1,24 @@
+import logging
+import warnings
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
-from fastapi import HTTPException, status, Depends, Request
+from fastapi import HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 import os
 from sqlalchemy.orm import Session
-from app.models import User, UserRole, Organization, OrganizationMember
+from app.models import User, UserRole, Organization, OrganizationMember, AccountType
 from app.database import get_session
+from app.utils.pii import redact_email, hash_email, redact_token
 
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-here")
+logger = logging.getLogger(__name__)
+
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("JWT_SECRET_KEY environment variable must be set")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = None  # Indefinite for demo
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 
 security = HTTPBearer()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -30,7 +37,8 @@ def create_access_token(
     email: str,
     organization_id: str,
     role: UserRole,
-    expires_delta: Optional[timedelta] = None
+    expires_delta: Optional[timedelta] = None,
+    account_type: Optional[AccountType] = None,
 ) -> str:
     """
     Create a JWT access token with organization context.
@@ -41,6 +49,7 @@ def create_access_token(
         organization_id: Organization the user is accessing
         role: User's role within the organization
         expires_delta: Optional expiration time delta
+        account_type: Optional account type (personal, organization, guest)
 
     Returns:
         Encoded JWT token string
@@ -49,16 +58,23 @@ def create_access_token(
         "sub": user_id,
         "email": email,
         "organization_id": organization_id,
-        "role": role.value if isinstance(role, UserRole) else role
+        "role": role.value if isinstance(role, UserRole) else role,
     }
+    if account_type is not None:
+        to_encode["account_type"] = (
+            account_type.value
+            if isinstance(account_type, AccountType)
+            else account_type
+        )
 
     # For demo purposes, don't set expiration if ACCESS_TOKEN_EXPIRE_MINUTES is None
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
         to_encode.update({"exp": expire})
     elif ACCESS_TOKEN_EXPIRE_MINUTES is not None:
-        expire = datetime.now(timezone.utc) + \
-            timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(
+            minutes=ACCESS_TOKEN_EXPIRE_MINUTES
+        )
         to_encode.update({"exp": expire})
 
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
@@ -76,10 +92,18 @@ def verify_token(token: str) -> Optional[dict]:
 
 class OrgContext:
     """Container for organization context extracted from JWT."""
-    def __init__(self, user: User, organization: Organization, role: UserRole):
+
+    def __init__(
+        self,
+        user: User,
+        organization: Organization,
+        role: UserRole,
+        account_type: AccountType = AccountType.ORGANIZATION,
+    ):
         self.user = user
         self.organization = organization
         self.role = role
+        self.account_type = account_type
 
     @property
     def user_id(self) -> str:
@@ -101,10 +125,18 @@ class OrgContext:
     def is_owner_or_admin(self) -> bool:
         return self.role in [UserRole.owner, UserRole.admin]
 
+    @property
+    def is_personal(self) -> bool:
+        return self.account_type == AccountType.PERSONAL
+
+    @property
+    def is_guest(self) -> bool:
+        return self.account_type == AccountType.GUEST
+
 
 def get_org_context(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_session)
+    db: Session = Depends(get_session),
 ) -> OrgContext:
     """
     Extract and validate organization context from JWT token.
@@ -116,9 +148,6 @@ def get_org_context(
     Raises:
         HTTPException: If token is invalid or user/org not found
     """
-    import logging
-    logger = logging.getLogger(__name__)
-
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -126,85 +155,113 @@ def get_org_context(
     )
 
     token = credentials.credentials
-    logger.info(f"🔐 Verifying token (length: {len(token) if token else 0})")
+    logger.info(f"[AUTH] Verifying token: {redact_token(token)}")
 
     # Decode token
     payload = verify_token(token)
     if payload is None:
-        logger.warning("❌ Token verification failed")
+        logger.warning("[WARN] Token verification failed")
         raise credentials_exception
 
     # Extract claims
     user_id: str = payload.get("sub")
     organization_id: str = payload.get("organization_id")
     role_str: str = payload.get("role")
+    account_type_str: Optional[str] = payload.get("account_type")
 
     if not user_id or not organization_id or not role_str:
-        logger.warning("❌ Missing required claims in token payload")
+        logger.warning("[WARN] Missing required claims in token payload")
         raise credentials_exception
 
-    logger.info(f"✅ Token verified for user_id: {user_id}, org: {organization_id}, role: {role_str}")
+    logger.info(
+        f"[OK] Token verified for user_id: {user_id}, org: {organization_id}, role: {role_str}"
+    )
 
     # Validate user exists
-    user = db.query(User).filter(User.id == user_id, User.is_active == True).first()
+    user = db.query(User).filter(User.id == user_id, User.is_active).first()
     if user is None:
-        logger.warning(f"❌ User not found or inactive: {user_id}")
+        logger.warning(f"[WARN] User not found or inactive: {user_id}")
         raise credentials_exception
 
     # Validate organization exists
-    organization = db.query(Organization).filter(
-        Organization.id == organization_id,
-        Organization.is_active == True
-    ).first()
+    organization = (
+        db.query(Organization)
+        .filter(Organization.id == organization_id, Organization.is_active)
+        .first()
+    )
     if organization is None:
-        logger.warning(f"❌ Organization not found or inactive: {organization_id}")
+        logger.warning(f"[WARN] Organization not found or inactive: {organization_id}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Organization not found or inactive"
+            detail="Organization not found or inactive",
         )
 
     # Validate membership
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == user_id,
-        OrganizationMember.organization_id == organization_id
-    ).first()
+    membership = (
+        db.query(OrganizationMember)
+        .filter(
+            OrganizationMember.user_id == user_id,
+            OrganizationMember.organization_id == organization_id,
+        )
+        .first()
+    )
 
     if membership is None:
-        logger.warning(f"❌ User {user_id} is not a member of organization {organization_id}")
+        logger.warning(
+            f"[WARN] User {user_id} is not a member of organization {organization_id}"
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="User is not a member of this organization"
+            detail="User is not a member of this organization",
         )
 
     # Parse role
     try:
         role = UserRole(role_str)
     except ValueError:
-        logger.warning(f"❌ Invalid role in token: {role_str}")
+        logger.warning(f"[WARN] Invalid role in token: {role_str}")
         raise credentials_exception
 
     # Verify role matches membership
     if membership.role != role:
         logger.warning(
-            f"❌ Role mismatch: token has {role_str}, membership has {membership.role.value}"
+            f"[WARN] Role mismatch: token has {role_str}, membership has {membership.role.value}"
         )
         raise credentials_exception
 
+    # Parse account_type (defaults to ORGANIZATION for backward compatibility)
+    account_type = AccountType.ORGANIZATION
+    if account_type_str:
+        try:
+            account_type = AccountType(account_type_str)
+        except ValueError:
+            logger.warning(f"[WARN] Invalid account_type in token: {account_type_str}")
+            raise credentials_exception
+
     logger.info(
-        f"✅ User authenticated: {user.email} in org {organization.name} as {role.value}"
+        f"[OK] User authenticated: {redact_email(user.email)} ({hash_email(user.email)}) in org {organization.name} as {role.value} (account_type={account_type.value})"
     )
 
-    return OrgContext(user=user, organization=organization, role=role)
+    return OrgContext(
+        user=user, organization=organization, role=role, account_type=account_type
+    )
 
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_session)
+    db: Session = Depends(get_session),
 ) -> User:
     """
-    Legacy compatibility function - extracts just the user.
-    Use get_org_context() for new organization-aware endpoints.
+    .. deprecated::
+        Use :func:`get_org_context` for new organization-aware endpoints.
+        This legacy function only returns the User and discards organization context.
     """
+    warnings.warn(
+        "get_current_user() is deprecated. Use get_org_context() instead for "
+        "organization-aware endpoints.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     org_context = get_org_context(credentials, db)
     return org_context.user
 
@@ -220,12 +277,10 @@ def require_role(allowed_roles: list[UserRole]):
     Returns:
         Dependency function that validates role and returns OrgContext
     """
-    def role_checker(org_context: OrgContext = Depends(get_org_context)) -> OrgContext:
-        import logging
-        logger = logging.getLogger(__name__)
 
+    def role_checker(org_context: OrgContext = Depends(get_org_context)) -> OrgContext:
         logger.info(
-            f"🔒 Checking role: user={org_context.user.email}, "
+            f"[AUTH] Checking role: user={redact_email(org_context.user.email)} ({hash_email(org_context.user.email)}), "
             f"org={org_context.organization.name}, "
             f"role={org_context.role.value}, "
             f"allowed={[r.value for r in allowed_roles]}"
@@ -233,16 +288,16 @@ def require_role(allowed_roles: list[UserRole]):
 
         if org_context.role not in allowed_roles:
             logger.warning(
-                f"❌ Access denied: user role {org_context.role.value} not in "
+                f"[WARN] Access denied: user role {org_context.role.value} not in "
                 f"{[r.value for r in allowed_roles]}"
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Insufficient permissions. Required roles: {[r.value for r in allowed_roles]}"
+                detail=f"Insufficient permissions. Required roles: {[r.value for r in allowed_roles]}",
             )
 
         logger.info(
-            f"✅ Access granted for {org_context.user.email} in {org_context.organization.name}"
+            f"[OK] Access granted for {redact_email(org_context.user.email)} ({hash_email(org_context.user.email)}) in {org_context.organization.name}"
         )
         return org_context
 
@@ -251,8 +306,9 @@ def require_role(allowed_roles: list[UserRole]):
 
 # Role-specific dependencies for organization context
 
+
 def get_owner_context(
-    org_context: OrgContext = Depends(require_role([UserRole.owner]))
+    org_context: OrgContext = Depends(require_role([UserRole.owner])),
 ) -> OrgContext:
     """Require owner role within organization."""
     return org_context
@@ -275,7 +331,7 @@ def get_owner_admin_or_analyst_context(
 
 
 def get_any_org_member_context(
-    org_context: OrgContext = Depends(get_org_context)
+    org_context: OrgContext = Depends(get_org_context),
 ) -> OrgContext:
     """Require any authenticated user within an organization."""
     return org_context
@@ -283,33 +339,59 @@ def get_any_org_member_context(
 
 # Legacy compatibility dependencies (deprecated - use OrgContext versions above)
 
+
 def get_admin_user(current_user: User = Depends(get_current_user)) -> User:
     """
-    Deprecated: Use get_owner_or_admin_context() instead.
-    Legacy compatibility for existing routes.
+    .. deprecated::
+        Use :func:`get_owner_or_admin_context` instead.
+        This legacy function does not enforce admin role checks and lacks organization context.
     """
+    warnings.warn(
+        "get_admin_user() is deprecated. Use get_owner_or_admin_context() instead, "
+        "which properly enforces role-based access within an organization.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return current_user
 
 
 def get_admin_or_analyst_user(current_user: User = Depends(get_current_user)) -> User:
     """
-    Deprecated: Use get_owner_admin_or_analyst_context() instead.
-    Legacy compatibility for existing routes.
+    .. deprecated::
+        Use :func:`get_owner_admin_or_analyst_context` instead.
+        This legacy function does not enforce role checks and lacks organization context.
     """
+    warnings.warn(
+        "get_admin_or_analyst_user() is deprecated. Use "
+        "get_owner_admin_or_analyst_context() instead, which properly enforces "
+        "role-based access within an organization.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return current_user
 
 
 def get_any_authenticated_user(current_user: User = Depends(get_current_user)) -> User:
     """
-    Deprecated: Use get_any_org_member_context() instead.
-    Legacy compatibility for existing routes.
+    .. deprecated::
+        Use :func:`get_any_org_member_context` instead.
+        This legacy function lacks organization context needed by org-aware endpoints.
     """
+    warnings.warn(
+        "get_any_authenticated_user() is deprecated. Use "
+        "get_any_org_member_context() instead, which provides full organization context.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return current_user
 
 
 # Helper functions for organization membership
 
-def get_user_organizations(user_id: str, db: Session) -> list[Tuple[Organization, UserRole]]:
+
+def get_user_organizations(
+    user_id: str, db: Session
+) -> list[Tuple[Organization, UserRole]]:
     """
     Get all organizations a user is a member of along with their roles.
 
@@ -320,21 +402,18 @@ def get_user_organizations(user_id: str, db: Session) -> list[Tuple[Organization
     Returns:
         List of (Organization, UserRole) tuples
     """
-    memberships = db.query(OrganizationMember, Organization).join(
-        Organization,
-        OrganizationMember.organization_id == Organization.id
-    ).filter(
-        OrganizationMember.user_id == user_id,
-        Organization.is_active == True
-    ).all()
+    memberships = (
+        db.query(OrganizationMember, Organization)
+        .join(Organization, OrganizationMember.organization_id == Organization.id)
+        .filter(OrganizationMember.user_id == user_id, Organization.is_active)
+        .all()
+    )
 
     return [(org, membership.role) for membership, org in memberships]
 
 
 def check_org_membership(
-    user_id: str,
-    organization_id: str,
-    db: Session
+    user_id: str, organization_id: str, db: Session
 ) -> Optional[UserRole]:
     """
     Check if a user is a member of an organization and return their role.
@@ -347,9 +426,13 @@ def check_org_membership(
     Returns:
         UserRole if user is a member, None otherwise
     """
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == user_id,
-        OrganizationMember.organization_id == organization_id
-    ).first()
+    membership = (
+        db.query(OrganizationMember)
+        .filter(
+            OrganizationMember.user_id == user_id,
+            OrganizationMember.organization_id == organization_id,
+        )
+        .first()
+    )
 
     return membership.role if membership else None

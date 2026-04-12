@@ -5,7 +5,7 @@
 
 # Service Account for Cloud Run
 resource "google_service_account" "cloud_run" {
-  account_id   = "${var.app_name}-${var.environment}-run-sa"
+  account_id   = "dht-${var.environment}-run-sa"  # Shortened to fit 30 char limit
   display_name = "Cloud Run Service Account for ${var.app_name}"
   project      = var.project_id
 }
@@ -33,7 +33,7 @@ resource "google_project_iam_member" "storage_admin" {
 
 # Cloud Run Service
 resource "google_cloud_run_v2_service" "main" {
-  name     = "${var.app_name}-${var.environment}"
+  name     = "dht-${var.environment}-api"  # Shortened name
   location = var.region
   project  = var.project_id
 
@@ -97,16 +97,16 @@ resource "google_cloud_run_v2_service" "main" {
         }
       }
 
-      # Startup probe
+      # Startup probe - allow up to 240s for app to start (30 failures × 8s)
       startup_probe {
         http_get {
           path = "/"
           port = 8000
         }
-        initial_delay_seconds = 0
-        timeout_seconds       = 1
-        period_seconds        = 3
-        failure_threshold     = 3
+        initial_delay_seconds = 5
+        timeout_seconds       = 3
+        period_seconds        = 8
+        failure_threshold     = 30
       }
 
       # Liveness probe

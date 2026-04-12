@@ -5,18 +5,11 @@ import apiClient from '@/lib/api'
 import {
   DatasetCreate
 } from '@/types/api'
-
-// Query keys
-const QUERY_KEYS = {
-  datasets: ['datasets'] as const,
-  dataset: (id: string) => ['dataset', id] as const,
-  datasetColumns: (id: string) => ['dataset', id, 'columns'] as const,
-  datasetVersions: (id: string) => ['dataset', id, 'versions'] as const,
-  datasetProfile: (id: string) => ['dataset', id, 'profile'] as const,
-}
+import { QUERY_KEYS } from '@/lib/constants/queryKeys'
+import { DEFAULT_PAGE_SIZE } from '@/lib/constants'
 
 // Hooks for datasets
-export function useDatasets(page: number = 1, size: number = 20) {
+export function useDatasets(page: number = 1, size: number = DEFAULT_PAGE_SIZE) {
   return useQuery({
     queryKey: [...QUERY_KEYS.datasets, page, size],
     queryFn: () => apiClient.getDatasets(),

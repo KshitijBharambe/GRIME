@@ -24,19 +24,19 @@ import {
   Database,
   Loader2,
 } from "lucide-react";
+import type { UnappliedFix } from "@/types/api";
 import {
   useUnappliedFixes,
   useApplyFixesMutation,
-  UnappliedFix,
 } from "@/lib/hooks/useIssues";
 
 interface ApplyFixesDialogProps {
-  open: boolean;
+  readonly open: boolean;
   onOpenChange: (open: boolean) => void;
-  datasetId: string;
-  datasetName: string;
-  versionId: string;
-  versionNumber: number;
+  readonly datasetId: string;
+  readonly datasetName: string;
+  readonly versionId: string;
+  readonly versionNumber: number;
 }
 
 export function ApplyFixesDialog({
@@ -83,7 +83,7 @@ export function ApplyFixesDialog({
         high: [] as UnappliedFix[],
         medium: [] as UnappliedFix[],
         low: [] as UnappliedFix[],
-      }
+      },
     );
   }, [unappliedFixes]);
 
@@ -125,7 +125,7 @@ export function ApplyFixesDialog({
       });
 
       toast.success(
-        `Successfully created version ${result.new_version.version_no} with ${result.fixes_applied} fixes applied`
+        `Successfully created version ${result.new_version.version_no} with ${result.fixes_applied} fixes applied`,
       );
       onOpenChange(false);
     } catch (error: unknown) {

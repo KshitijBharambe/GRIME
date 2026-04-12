@@ -7,7 +7,7 @@ import pandas as pd
 import psutil
 import os
 import logging
-from typing import Iterator, Optional, Dict, Any
+from typing import Iterator, Optional, Dict
 from io import BytesIO
 
 logger = logging.getLogger(__name__)
@@ -245,7 +245,7 @@ class OptimizedDataFrameOperations:
         saved_memory = initial_memory - final_memory
         
         logger.info(
-            f"Memory optimization: "
+            "Memory optimization: "
             f"{initial_memory:.2f}MB -> {final_memory:.2f}MB "
             f"(saved {saved_memory:.2f}MB, {saved_memory/initial_memory*100:.1f}%)"
         )
@@ -274,7 +274,7 @@ class OptimizedDataFrameOperations:
         
         logger.warning(
             f"DataFrame has {len(df)} rows, sampling to {max_rows} rows "
-            f"using '{strategy}' strategy"
+            f"using {strategy!r} strategy"
         )
         
         if strategy == 'head':

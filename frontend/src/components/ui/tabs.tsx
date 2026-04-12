@@ -19,11 +19,11 @@ const useTabsContext = () => {
 }
 
 interface TabsProps {
-  value?: string
-  defaultValue?: string
+  readonly value?: string
+  readonly defaultValue?: string
   onValueChange?: (value: string) => void
-  children: React.ReactNode
-  className?: string
+  readonly children: React.ReactNode
+  readonly className?: string
 }
 
 const Tabs = React.forwardRef<HTMLDivElement, TabsProps>(
@@ -50,8 +50,8 @@ const Tabs = React.forwardRef<HTMLDivElement, TabsProps>(
 Tabs.displayName = "Tabs"
 
 interface TabsListProps {
-  children: React.ReactNode
-  className?: string
+  readonly children: React.ReactNode
+  readonly className?: string
 }
 
 const TabsList = React.forwardRef<HTMLDivElement, TabsListProps>(
@@ -72,10 +72,10 @@ const TabsList = React.forwardRef<HTMLDivElement, TabsListProps>(
 TabsList.displayName = "TabsList"
 
 interface TabsTriggerProps {
-  value: string
-  children: React.ReactNode
-  className?: string
-  disabled?: boolean
+  readonly value: string
+  readonly children: React.ReactNode
+  readonly className?: string
+  readonly disabled?: boolean
 }
 
 const TabsTrigger = React.forwardRef<HTMLButtonElement, TabsTriggerProps>(
@@ -105,9 +105,9 @@ const TabsTrigger = React.forwardRef<HTMLButtonElement, TabsTriggerProps>(
 TabsTrigger.displayName = "TabsTrigger"
 
 interface TabsContentProps {
-  value: string
-  children: React.ReactNode
-  className?: string
+  readonly value: string
+  readonly children: React.ReactNode
+  readonly className?: string
 }
 
 const TabsContent = React.forwardRef<HTMLDivElement, TabsContentProps>(

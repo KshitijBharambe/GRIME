@@ -24,7 +24,7 @@ resource "google_compute_subnetwork" "subnet" {
 
 # VPC Connector (required for Cloud Run to access Cloud SQL via private IP)
 resource "google_vpc_access_connector" "connector" {
-  name          = "${var.vpc_name}-connector"
+  name          = "data-hygiene-conn"
   region        = var.region
   network       = google_compute_network.vpc.name
   ip_cidr_range = var.vpc_connector_cidr

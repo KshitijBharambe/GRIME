@@ -13,7 +13,9 @@ variable "secrets" {
     value       = string
     description = string
   }))
-  sensitive = true
+  # Note: We don't mark this as sensitive at the variable level
+  # because for_each cannot work with sensitive values.
+  # The actual secret values are still protected in Secret Manager.
 }
 
 variable "labels" {

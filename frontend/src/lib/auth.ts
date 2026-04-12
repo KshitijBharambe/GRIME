@@ -3,6 +3,11 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import type { JWT } from "next-auth/jwt";
 import type { Session, User } from "next-auth";
 import { UserLogin, UserRole } from "@/types/api";
+import { getApiUrl } from "@/lib/config";
+
+if (process.env.NODE_ENV === "production" && !process.env.NEXTAUTH_SECRET) {
+  throw new Error("NEXTAUTH_SECRET must be set in production");
+}
 
 // Import API client dynamically to avoid SSR issues
 const getApiClient = async () => {
@@ -37,6 +42,10 @@ export default NextAuth({
           return null;
         }
 
+        const accountType = credentials.organizationId
+          ? "organization"
+          : "personal";
+
         try {
           const apiClient = await getApiClient();
 
@@ -54,13 +63,14 @@ export default NextAuth({
               apiClient.setToken(response.access_token);
 
               return {
-                id: response.user?.id || '',
+                id: response.user?.id || "",
                 email: credentials.email as string,
-                name: response.user?.name || '',
-                role: (response.role || 'viewer') as UserRole,
+                name: response.user?.name || "",
+                role: (response.role || "viewer") as UserRole,
                 organizationId: response.organization?.id,
                 organizationName: response.organization?.name,
                 accessToken: response.access_token,
+                accountType,
               };
             }
           } else {
@@ -79,13 +89,41 @@ export default NextAuth({
                 id: response.user.id,
                 email: response.user.email,
                 name: response.user.name,
-                role: (response.user.role || response.role || 'viewer') as UserRole,
+                role: (response.user.role ||
+                  response.role ||
+                  "viewer") as UserRole,
                 accessToken: response.access_token,
+                accountType,
               };
             }
           }
 
           return null;
+        } catch {
+          return null;
+        }
+      },
+    }),
+    CredentialsProvider({
+      id: "guest",
+      name: "Guest",
+      credentials: {},
+      async authorize() {
+        try {
+          const res = await fetch(`${getApiUrl()}/auth/guest-login`, {
+            method: "POST",
+          });
+          if (!res.ok) return null;
+          const data = await res.json();
+          return {
+            id: data.user_id,
+            email: data.email,
+            name: "Guest",
+            accessToken: data.access_token,
+            organizationId: data.organization_id,
+            role: "viewer" as UserRole,
+            accountType: "guest" as const,
+          };
         } catch {
           return null;
         }
@@ -108,6 +146,7 @@ export default NextAuth({
         role?: string;
         organizationId?: string;
         organizationName?: string;
+        accountType?: string;
       };
     }) {
       if (user) {
@@ -115,6 +154,7 @@ export default NextAuth({
         token.role = user.role;
         token.organizationId = user.organizationId;
         token.organizationName = user.organizationName;
+        token.accountType = user.accountType;
       }
       return token;
     },
@@ -129,6 +169,9 @@ export default NextAuth({
         }
         if (token.organizationName) {
           session.user.organizationName = token.organizationName;
+        }
+        if (token.accountType) {
+          session.user.accountType = token.accountType;
         }
 
         // Set the token in API client on session creation (client-side only)
@@ -146,6 +189,6 @@ export default NextAuth({
   },
   session: {
     strategy: "jwt",
-    maxAge: 365 * 24 * 60 * 60, // 1 year in seconds (effectively indefinite for demo)
+    maxAge: 8 * 60 * 60, // 8 hours
   },
 });

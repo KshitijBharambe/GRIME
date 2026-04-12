@@ -11,7 +11,7 @@ resource "random_password" "db_password" {
 
 # Cloud SQL Instance
 resource "google_sql_database_instance" "main" {
-  name             = "${var.app_name}-${var.environment}-db"
+  name             = "dht-${var.environment}-db"  # Shortened name
   database_version = "POSTGRES_17"
   region           = var.region
   project          = var.project_id
@@ -51,25 +51,25 @@ resource "google_sql_database_instance" "main" {
       update_track = "stable"
     }
 
-    # Database flags for optimization
+    # Database flags for optimization (tuned for db-f1-micro with 1GB RAM)
     database_flags {
       name  = "max_connections"
-      value = "100"
+      value = "50" # Reduced for f1-micro
     }
 
     database_flags {
       name  = "shared_buffers"
-      value = "32768" # 256MB in 8KB pages
+      value = "16384" # 128MB in 8KB pages
     }
 
     database_flags {
       name  = "effective_cache_size"
-      value = "131072" # 1GB in 8KB pages
+      value = "65536" # 512MB in 8KB pages (within allowed range 13107-91750)
     }
 
     database_flags {
       name  = "work_mem"
-      value = "2621" # ~2.5MB in KB
+      value = "4096" # 4MB in KB
     }
 
     # Insights configuration
@@ -103,7 +103,7 @@ resource "google_sql_user" "user" {
 
 # Store database password in Secret Manager
 resource "google_secret_manager_secret" "db_password" {
-  secret_id = "${var.app_name}-${var.environment}-db-password"
+  secret_id = "dht-${var.environment}-db-pwd"  # Shortened name
   project   = var.project_id
 
   replication {

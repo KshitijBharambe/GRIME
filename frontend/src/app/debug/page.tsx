@@ -24,6 +24,7 @@ import {
   Zap,
   Settings,
 } from "lucide-react";
+import { notFound } from "next/navigation";
 import { useSession } from "next-auth/react";
 
 interface DebugSession {
@@ -46,6 +47,10 @@ interface TestScenario {
 }
 
 export default function DebugToolsPage() {
+  if (process.env.NODE_ENV === "production") {
+    notFound();
+  }
+
   const { data: session } = useSession();
   const [debugSessions, setDebugSessions] = useState<DebugSession[]>([]);
   const [testScenarios, setTestScenarios] = useState<TestScenario[]>([]);
@@ -288,9 +293,9 @@ export default function DebugToolsPage() {
                         </div>
                         <div className="space-y-2">
                           {selectedSession.debug_data?.breakpoints?.map(
-                            (bp: string, index: number) => (
+                            (bp: string) => (
                               <div
-                                key={index}
+                                key={bp}
                                 className="flex items-center justify-between p-2 bg-muted rounded"
                               >
                                 <code className="text-sm">{bp}</code>
@@ -411,10 +416,11 @@ export default function DebugToolsPage() {
               <CardContent>
                 <div className="space-y-4">
                   <div>
-                    <label className="text-sm font-medium">
+                    <label htmlFor="num-rows" className="text-sm font-medium">
                       Number of Rows
                     </label>
                     <input
+                      id="num-rows"
                       type="number"
                       className="w-full mt-1 p-2 border rounded"
                       placeholder="1000"
@@ -422,10 +428,11 @@ export default function DebugToolsPage() {
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium">
+                    <label htmlFor="columns-config" className="text-sm font-medium">
                       Columns Configuration
                     </label>
                     <textarea
+                      id="columns-config"
                       className="w-full mt-1 p-2 border rounded"
                       rows={6}
                       placeholder="Configure columns and their properties..."

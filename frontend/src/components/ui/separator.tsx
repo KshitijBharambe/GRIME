@@ -4,8 +4,8 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 
 interface SeparatorProps extends React.HTMLAttributes<HTMLDivElement> {
-  orientation?: "horizontal" | "vertical"
-  decorative?: boolean
+  readonly orientation?: "horizontal" | "vertical"
+  readonly decorative?: boolean
 }
 
 const Separator = React.forwardRef<HTMLDivElement, SeparatorProps>(

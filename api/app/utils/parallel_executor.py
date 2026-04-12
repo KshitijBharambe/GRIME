@@ -13,9 +13,8 @@ from enum import Enum
 import time
 from contextlib import contextmanager
 
-from sqlalchemy.orm import Session, sessionmaker
-from app.models import Rule, RuleKind, Execution, ExecutionRule, ExecutionStatus
-from app.services.rule_engine import RuleValidator
+from sqlalchemy.orm import sessionmaker
+from app.models import Rule, RuleKind
 from app.utils.memory_optimization import MemoryMonitor
 
 logger = logging.getLogger(__name__)
@@ -99,7 +98,8 @@ class DependencyAnalyzer:
             params_str = getattr(rule, 'params', None) or ''
             params = json.loads(params_str) if params_str else {}
             return set(params.get('dependencies', []))
-        except:
+        except (json.JSONDecodeError, AttributeError, TypeError, KeyError) as e:
+            logger.debug(f"Failed to parse custom rule dependencies: {e}")
             return set()
 
     def get_execution_groups(self, rules: List[Rule], dependencies: Dict[str, Set[str]]) -> List[List[Rule]]:
@@ -157,7 +157,7 @@ class ThreadSafeSessionManager:
         try:
             yield session
             session.commit()
-        except Exception as e:
+        except Exception:
             session.rollback()
             raise
         finally:
@@ -169,8 +169,8 @@ class ThreadSafeSessionManager:
         if hasattr(self.local_sessions, 'session'):
             try:
                 self.local_sessions.session.close()
-            except:
-                pass
+            except Exception as e:
+                logger.debug(f"Failed to close thread-local session: {e}")
             delattr(self.local_sessions, 'session')
 
 
