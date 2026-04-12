@@ -2,14 +2,8 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import apiClient from '@/lib/api'
-
-// Query keys
-const QUERY_KEYS = {
-  qualitySummary: (datasetId: string) => ['quality-summary', datasetId] as const,
-  qualityTrends: (days: number) => ['quality-trends', days] as const,
-  issuePatterns: ['issue-patterns'] as const,
-  exportHistory: (datasetId: string) => ['export-history', datasetId] as const,
-}
+import { QUERY_KEYS } from '@/lib/constants/queryKeys'
+import { ENTITY_STALE_TIME } from '@/lib/constants'
 
 // Quality Reports Hooks
 export function useQualitySummary(datasetId: string) {
@@ -36,8 +30,9 @@ export function useIssuePatterns() {
 
 export function useAllDatasetsQualityScores() {
   return useQuery({
-    queryKey: ['all-datasets-quality-scores'],
+    queryKey: QUERY_KEYS.allDatasetsQualityScores,
     queryFn: () => apiClient.getAllDatasetsQualityScores(),
+    staleTime: ENTITY_STALE_TIME,
   })
 }
 
@@ -54,7 +49,7 @@ export function useGenerateQualityReport() {
     }) => apiClient.generateQualityReport(datasetId, includeCharts),
     onSuccess: () => {
       // Optionally invalidate related queries
-      queryClient.invalidateQueries({ queryKey: ['exports'] })
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.exports })
     },
   })
 }
@@ -117,7 +112,7 @@ export function useDeleteExport() {
     mutationFn: (exportId: string) => apiClient.deleteExport(exportId),
     onSuccess: () => {
       // Invalidate all export history queries
-      queryClient.invalidateQueries({ queryKey: ['export-history'] })
+      queryClient.invalidateQueries({ queryKey: ['export-history'] })  // prefix: invalidates all exportHistory(datasetId) keys
     },
   })
 }

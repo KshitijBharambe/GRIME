@@ -1,6 +1,5 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Database,
   AlertTriangle,
@@ -11,7 +10,9 @@ import {
   Minus,
 } from "lucide-react";
 import { useDashboardOverview } from "@/lib/hooks/useDashboard";
-import { MagicBentoWrapper } from "@/components/MagicBentoWrapper";
+import { LoadingState, ErrorState } from "@/components/ui/state-views";
+import { Card, CardContent } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 interface StatCard {
   title: string;
@@ -28,17 +29,17 @@ interface StatCard {
 function getTrendIcon(trend: "up" | "down" | "neutral") {
   switch (trend) {
     case "up":
-      return <TrendingUp className="h-3 w-3" />;
+      return <TrendingUp className="h-4 w-4" />;
     case "down":
-      return <TrendingDown className="h-3 w-3" />;
+      return <TrendingDown className="h-4 w-4" />;
     default:
-      return <Minus className="h-3 w-3" />;
+      return <Minus className="h-4 w-4" />;
   }
 }
 
 function getTrendColor(
   trend: "up" | "down" | "neutral",
-  context: "positive" | "negative" = "positive"
+  context: "positive" | "negative" = "positive",
 ) {
   if (trend === "neutral") return "text-muted-foreground";
 
@@ -54,90 +55,21 @@ export function StatsCards() {
 
   if (isLoading) {
     return (
-      <MagicBentoWrapper
-        textAutoHide={true}
-        enableStars={false}
-        enableSpotlight={true}
-        enableBorderGlow={true}
-        enableTilt={false}
-        enableMagnetism={false}
-        clickEffect={true}
-        spotlightRadius={300}
-        particleCount={12}
-        glowColor="132, 0, 255"
-        gridColumns="grid-cols-1 md:grid-cols-2 lg:grid-cols-4"
-      >
-        {[...Array(4)].map((_, index) => (
-          <Card key={index}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <div className="h-4 w-20 bg-muted animate-pulse rounded" />
-              <div className="h-4 w-4 bg-muted animate-pulse rounded" />
-            </CardHeader>
-            <CardContent>
-              <div className="h-8 w-16 bg-muted animate-pulse rounded mb-2" />
-              <div className="h-3 w-24 bg-muted animate-pulse rounded" />
-            </CardContent>
-          </Card>
-        ))}
-      </MagicBentoWrapper>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <LoadingState
+          rows={4}
+          className="col-span-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"
+        />
+      </div>
     );
   }
 
-  if (error) {
+  if (error || !dashboardData) {
     return (
-      <MagicBentoWrapper
-        textAutoHide={true}
-        enableStars={false}
-        enableSpotlight={true}
-        enableBorderGlow={true}
-        enableTilt={false}
-        enableMagnetism={false}
-        clickEffect={true}
-        spotlightRadius={300}
-        particleCount={12}
-        glowColor="132, 0, 255"
-        gridColumns="grid-cols-1 md:grid-cols-2 lg:grid-cols-4"
-      >
-        <Card>
-          <CardContent className="p-6">
-            <div className="text-sm text-muted-foreground">
-              Unable to load dashboard data
-              {process.env.NODE_ENV === "development" && error && (
-                <div className="mt-2 text-xs text-red-500">
-                  Error:{" "}
-                  {error instanceof Error ? error.message : "Unknown error"}
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </MagicBentoWrapper>
-    );
-  }
-
-  if (!dashboardData) {
-    return (
-      <MagicBentoWrapper
-        textAutoHide={true}
-        enableStars={false}
-        enableSpotlight={true}
-        enableBorderGlow={true}
-        enableTilt={false}
-        enableMagnetism={false}
-        clickEffect={true}
-        spotlightRadius={300}
-        particleCount={12}
-        glowColor="132, 0, 255"
-        gridColumns="grid-cols-1 md:grid-cols-2 lg:grid-cols-4"
-      >
-        <Card>
-          <CardContent className="p-6">
-            <div className="text-sm text-muted-foreground">
-              No dashboard data available
-            </div>
-          </CardContent>
-        </Card>
-      </MagicBentoWrapper>
+      <ErrorState
+        message={error ? "Unable to load dashboard data" : "No data available"}
+        className="col-span-full"
+      />
     );
   }
 
@@ -170,41 +102,65 @@ export function StatsCards() {
     },
   ];
 
+  const descriptions: Record<string, string> = {
+    "Total Datasets":
+      "Datasets currently available for profiling and validation.",
+    "Active Issues": "Open issues that still need review or remediation.",
+    "Resolved Issues": "Issues closed through fixes or successful reruns.",
+    "Total Executions":
+      "Completed validation and monitoring runs across the workspace.",
+  };
+
+  const toneClasses: Record<string, string> = {
+    default: "border-border bg-muted/40 text-foreground",
+    success:
+      "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-300",
+    warning:
+      "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-300",
+    destructive:
+      "border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/50 dark:text-red-300",
+  };
+
   return (
-    <MagicBentoWrapper
-      textAutoHide={true}
-      enableStars={false}
-      enableSpotlight={true}
-      enableBorderGlow={true}
-      enableTilt={false}
-      enableMagnetism={false}
-      clickEffect={true}
-      spotlightRadius={300}
-      particleCount={12}
-      glowColor="132, 0, 255"
-      gridColumns="grid-cols-1 md:grid-cols-2 lg:grid-cols-4"
-    >
-      {stats.map((stat, index) => {
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {stats.map((stat) => {
         const Icon = stat.icon;
+        const variant = stat.variant ?? "default";
         const isNegativeContext =
           stat.title.includes("Issues") && stat.title.includes("Active");
 
         return (
-          <Card key={index}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                {stat.title}
-              </CardTitle>
-              <Icon className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stat.value}</div>
-              {stat.change && (
-                <div className="flex items-center space-x-1 text-xs">
+          <Card key={stat.title} className="border-border/70 shadow-sm">
+            <CardContent className="p-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 space-y-2">
+                  <p className="text-sm font-medium text-muted-foreground">
+                    {stat.title}
+                  </p>
+                  <div className="text-3xl font-semibold tracking-tight">
+                    {stat.value}
+                  </div>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    {descriptions[stat.title]}
+                  </p>
+                </div>
+
+                <div
+                  className={cn(
+                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border",
+                    toneClasses[variant],
+                  )}
+                >
+                  <Icon className="h-5 w-5" />
+                </div>
+              </div>
+
+              {stat.change ? (
+                <div className="mt-4 flex items-center gap-1 text-xs">
                   <span
                     className={getTrendColor(
                       stat.change.trend,
-                      isNegativeContext ? "negative" : "positive"
+                      isNegativeContext ? "negative" : "positive",
                     )}
                   >
                     {getTrendIcon(stat.change.trend)}
@@ -212,7 +168,7 @@ export function StatsCards() {
                   <span
                     className={getTrendColor(
                       stat.change.trend,
-                      isNegativeContext ? "negative" : "positive"
+                      isNegativeContext ? "negative" : "positive",
                     )}
                   >
                     {stat.change.value}%
@@ -221,11 +177,13 @@ export function StatsCards() {
                     {stat.change.period}
                   </span>
                 </div>
+              ) : (
+                <div className="mt-4 h-px bg-border" />
               )}
             </CardContent>
           </Card>
         );
       })}
-    </MagicBentoWrapper>
+    </div>
   );
 }

@@ -220,6 +220,17 @@ format: ## Auto-format code
 type-check: ## Run type checking
 	@$(COMPOSE_DEV) exec backend mypy app/
 
+sonar-scan: ## Run SonarQube analysis
+	@echo "$(GREEN)Running SonarQube analysis...$(NC)"
+	@./run-sonar-scan.sh
+
+sonar-report: ## Generate SonarQube report with coverage
+	@echo "$(GREEN)Generating test coverage for SonarQube...$(NC)"
+	@cd api && python -m pytest tests/ --cov=app --cov-report=xml:coverage.xml --cov-report=term -v
+	@echo "$(GREEN)✓ Coverage report generated$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Now run: make sonar-scan$(NC)"
+
 ##@ Health & Monitoring
 
 health-check: ## Check health of all services

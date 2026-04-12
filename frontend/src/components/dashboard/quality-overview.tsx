@@ -9,79 +9,31 @@ import {
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import dynamic from "next/dynamic";
-import { Pie, Cell, Tooltip } from "recharts";
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { useDashboardOverview } from "@/lib/hooks/useDashboard";
-import { useIssuesSummary, IssuesSummary } from "@/lib/hooks/useIssues";
-import { MagicBentoWrapper } from "@/components/MagicBentoWrapper";
-
-// Dynamically import Recharts to avoid SSR issues
-const PieChart = dynamic(
-  () => import("recharts").then((mod) => ({ default: mod.PieChart })),
-  { ssr: false }
-);
-const ResponsiveContainer = dynamic(
-  () =>
-    import("recharts").then((mod) => ({ default: mod.ResponsiveContainer })),
-  { ssr: false }
-);
-
-function getScoreColor(score: number) {
-  if (score >= 90) return "text-green-600";
-  if (score >= 75) return "text-yellow-600";
-  return "text-red-600";
-}
-
-function getScoreVariant(
-  score: number
-): "default" | "secondary" | "destructive" | "outline" {
-  if (score >= 90) return "default";
-  if (score >= 75) return "secondary";
-  return "destructive";
-}
+import { useIssuesSummary } from "@/lib/hooks/useIssues";
+import type { IssuesSummary } from "@/types/api";
+import {
+  getQualityStatus,
+  getQualityTier,
+  getScoreVariant,
+} from "@/lib/thresholds";
+import { SEVERITY_TEXT_COLORS, SEVERITY_CHART_COLORS } from "@/lib/ui-tokens";
+import { LoadingState, EmptyState } from "@/components/ui/state-views";
 
 export function QualityOverview() {
   const { data: dashboardData, isLoading } = useDashboardOverview();
-  const { data: issuesSummary, isLoading: issuesLoading } = useIssuesSummary() as {
-    data: IssuesSummary | undefined;
-    isLoading: boolean;
-  };
+  const { data: issuesSummary, isLoading: issuesLoading } =
+    useIssuesSummary() as {
+      data: IssuesSummary | undefined;
+      isLoading: boolean;
+    };
 
   if (isLoading || issuesLoading) {
     return (
       <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Data Quality Metrics</CardTitle>
-            <CardDescription>
-              Current quality scores across all datasets
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="space-y-4">
-              {[...Array(3)].map((_, index) => (
-                <div key={index} className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="h-4 w-20 bg-muted animate-pulse rounded" />
-                    <div className="h-4 w-12 bg-muted animate-pulse rounded" />
-                  </div>
-                  <div className="h-2 w-full bg-muted animate-pulse rounded" />
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Issue Distribution</CardTitle>
-            <CardDescription>
-              Breakdown of data quality issues by category
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="h-64 w-full bg-muted animate-pulse rounded" />
-          </CardContent>
-        </Card>
+        <LoadingState rows={3} message="Loading quality metrics..." />
+        <LoadingState rows={2} message="Loading issue distribution..." />
       </div>
     );
   }
@@ -89,32 +41,14 @@ export function QualityOverview() {
   if (!dashboardData && !issuesSummary) {
     return (
       <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Data Quality Metrics</CardTitle>
-            <CardDescription>
-              Current quality scores across all datasets
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              No quality data available
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Issue Distribution</CardTitle>
-            <CardDescription>
-              Breakdown of data quality issues by category
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              No issue data available
-            </p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          title="No quality data available"
+          description="Upload datasets and run quality checks to see metrics here."
+        />
+        <EmptyState
+          title="No issue data available"
+          description="Issue distribution will appear after running quality checks."
+        />
       </div>
     );
   }
@@ -133,36 +67,29 @@ export function QualityOverview() {
       ? dashboardData.overview.total_issues - dashboardData.overview.total_fixes
       : 0);
 
-  // Create quality metrics based on real data (now using DQI, CleanRowsPct, Hybrid)
   const qualityMetrics = [
     {
-      name: "DQI (Data Quality Index)",
+      name: "DQI",
       score: Math.round(avgDQI),
-      status:
-        avgDQI >= 90 ? "good" : avgDQI >= 75 ? "warning" : "poor",
-      issues: activeIssuesCount,
-      description: "Weighted constraint satisfaction"
+      description: "Weighted constraint satisfaction",
     },
     {
-      name: "Clean Rows %",
+      name: "Clean rows",
       score: Math.round(avgCleanRowsPct),
-      status:
-        avgCleanRowsPct >= 90 ? "good" : avgCleanRowsPct >= 75 ? "warning" : "poor",
-      issues: activeIssuesCount,
-      description: "Rows without any issues"
+      description: "Rows without any issues",
     },
     {
       name: "Hybrid Score",
       score: Math.round(avgHybrid),
-      status:
-        avgHybrid >= 90 ? "good" : avgHybrid >= 75 ? "warning" : "poor",
+      status: getQualityStatus(avgHybrid),
       issues: activeIssuesCount,
-      description: "Harmonic mean of DQI and Clean Rows"
+      description: "Harmonic mean of DQI and Clean Rows",
     },
   ];
 
   // Create issue distribution from severity data if available
-  let issueDistribution: Array<{ name: string; value: number; color: string }> = [];
+  let issueDistribution: Array<{ name: string; value: number; color: string }> =
+    [];
 
   if (issuesSummary?.severity_distribution) {
     const severityData = issuesSummary.severity_distribution;
@@ -177,22 +104,22 @@ export function QualityOverview() {
         {
           name: "Critical Issues",
           value: Math.round((severityData.critical / totalIssues) * 100),
-          color: "#ef4444",
+          color: SEVERITY_CHART_COLORS.critical,
         },
         {
           name: "High Priority",
           value: Math.round((severityData.high / totalIssues) * 100),
-          color: "#f97316",
+          color: SEVERITY_CHART_COLORS.high,
         },
         {
           name: "Medium Priority",
           value: Math.round((severityData.medium / totalIssues) * 100),
-          color: "#eab308",
+          color: SEVERITY_CHART_COLORS.medium,
         },
         {
           name: "Low Priority",
           value: Math.round((severityData.low / totalIssues) * 100),
-          color: "#3b82f6",
+          color: SEVERITY_CHART_COLORS.low,
         },
       ].filter((item) => item.value > 0);
     }
@@ -227,42 +154,64 @@ export function QualityOverview() {
     }
   }
 
-  // Dynamic colors based on data type
-  const COLORS = issuesSummary?.severity_distribution
-    ? ["#ef4444", "#f97316", "#eab308", "#3b82f6"] // Red to blue for severity
-    : ["#22c55e", "#3b82f6", "#eab308", "#ef4444"]; // Green to red for quality
+  const overallTier = getQualityTier(avgHybrid);
 
   return (
-    <MagicBentoWrapper
-      textAutoHide={true}
-      enableStars={false}
-      enableSpotlight={true}
-      enableBorderGlow={true}
-      enableTilt={false}
-      enableMagnetism={false}
-      clickEffect={true}
-      spotlightRadius={300}
-      particleCount={12}
-      glowColor="132, 0, 255"
-      gridColumns="grid-cols-1 md:grid-cols-2"
-    >
-      {/* Quality Metrics */}
-      <Card className="h-full">
-        <CardHeader>
-          <CardTitle>Data Quality Metrics</CardTitle>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <Card className="h-full border-border/70 shadow-sm">
+        <CardHeader className="space-y-1">
+          <CardTitle>Quality score</CardTitle>
           <CardDescription>
-            Current quality scores across all datasets
+            Average health across datasets and recent validation runs.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6 flex flex-col justify-between min-h-[280px]">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">Overall Hybrid Score</span>
-            <Badge
-              variant={getScoreVariant(avgHybrid)}
-              className="text-lg px-3 py-1"
-            >
-              {Math.round(avgHybrid)}%
-            </Badge>
+        <CardContent className="space-y-6">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+            <div className="rounded-lg border border-border/70 bg-muted/20 p-4">
+              <p className="text-sm font-medium text-muted-foreground">
+                Overall hybrid score
+              </p>
+              <div className="mt-3 flex flex-wrap items-end gap-3">
+                <span className="text-4xl font-semibold tracking-tight">
+                  {Math.round(avgHybrid)}%
+                </span>
+                <Badge variant={getScoreVariant(avgHybrid)}>
+                  {overallTier.label}
+                </Badge>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {activeIssuesCount} active issue
+                {activeIssuesCount === 1 ? "" : "s"} currently open across
+                monitored datasets.
+              </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+              <div className="rounded-lg border border-border/70 bg-background px-4 py-3">
+                <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                  Datasets
+                </p>
+                <p className="mt-1 text-2xl font-semibold tracking-tight">
+                  {dashboardData?.overview.total_datasets ?? 0}
+                </p>
+              </div>
+              <div className="rounded-lg border border-border/70 bg-background px-4 py-3">
+                <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                  Executions
+                </p>
+                <p className="mt-1 text-2xl font-semibold tracking-tight">
+                  {dashboardData?.overview.total_executions ?? 0}
+                </p>
+              </div>
+              <div className="rounded-lg border border-border/70 bg-background px-4 py-3">
+                <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                  Clean rows
+                </p>
+                <p className="mt-1 text-2xl font-semibold tracking-tight">
+                  {Math.round(avgCleanRowsPct)}%
+                </p>
+              </div>
+            </div>
           </div>
 
           <div className="space-y-4">
@@ -271,47 +220,49 @@ export function QualityOverview() {
                 <div className="flex items-center justify-between text-sm">
                   <div className="flex flex-col">
                     <span className="font-medium">{metric.name}</span>
-                    <span className="text-xs text-muted-foreground">{metric.description}</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <span className={getScoreColor(metric.score)}>
-                      {metric.score}%
+                    <span className="text-xs text-muted-foreground">
+                      {metric.description}
                     </span>
                   </div>
+                  <span className="font-medium">{metric.score}%</span>
                 </div>
                 <Progress value={metric.score} className="h-2" />
               </div>
             ))}
           </div>
 
-          <div className="space-y-2 pt-4 border-t">
+          <div className="space-y-3 border-t pt-4">
             {issuesSummary?.severity_distribution ? (
               <>
-                <div className="text-sm font-medium mb-3">
-                  Issues by Severity
-                </div>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div className="flex justify-between">
+                <div className="text-sm font-medium">Issues by severity</div>
+                <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+                  <div className="flex items-center justify-between rounded-lg border border-border/70 bg-background px-3 py-2">
                     <span>Critical</span>
-                    <span className="font-medium text-red-600">
+                    <span
+                      className={`font-medium ${SEVERITY_TEXT_COLORS.critical}`}
+                    >
                       {issuesSummary.severity_distribution.critical}
                     </span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex items-center justify-between rounded-lg border border-border/70 bg-background px-3 py-2">
                     <span>High</span>
-                    <span className="font-medium text-orange-600">
+                    <span
+                      className={`font-medium ${SEVERITY_TEXT_COLORS.high}`}
+                    >
                       {issuesSummary.severity_distribution.high}
                     </span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex items-center justify-between rounded-lg border border-border/70 bg-background px-3 py-2">
                     <span>Medium</span>
-                    <span className="font-medium text-yellow-600">
+                    <span
+                      className={`font-medium ${SEVERITY_TEXT_COLORS.medium}`}
+                    >
                       {issuesSummary.severity_distribution.medium}
                     </span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex items-center justify-between rounded-lg border border-border/70 bg-background px-3 py-2">
                     <span>Low</span>
-                    <span className="font-medium text-blue-600">
+                    <span className={`font-medium ${SEVERITY_TEXT_COLORS.low}`}>
                       {issuesSummary.severity_distribution.low}
                     </span>
                   </div>
@@ -320,29 +271,29 @@ export function QualityOverview() {
             ) : (
               qualityDistribution && (
                 <>
-                  <div className="text-sm font-medium mb-3">
-                    Dataset Quality Distribution
+                  <div className="text-sm font-medium">
+                    Dataset quality distribution
                   </div>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div className="flex justify-between">
+                  <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+                    <div className="flex items-center justify-between rounded-lg border border-border/70 bg-background px-3 py-2">
                       <span>Excellent (90%+)</span>
                       <span className="font-medium">
                         {qualityDistribution.excellent}
                       </span>
                     </div>
-                    <div className="flex justify-between">
+                    <div className="flex items-center justify-between rounded-lg border border-border/70 bg-background px-3 py-2">
                       <span>Good (75-89%)</span>
                       <span className="font-medium">
                         {qualityDistribution.good}
                       </span>
                     </div>
-                    <div className="flex justify-between">
+                    <div className="flex items-center justify-between rounded-lg border border-border/70 bg-background px-3 py-2">
                       <span>Fair (50-74%)</span>
                       <span className="font-medium">
                         {qualityDistribution.fair}
                       </span>
                     </div>
-                    <div className="flex justify-between">
+                    <div className="flex items-center justify-between rounded-lg border border-border/70 bg-background px-3 py-2">
                       <span>Poor (&lt;50%)</span>
                       <span className="font-medium">
                         {qualityDistribution.poor}
@@ -356,21 +307,20 @@ export function QualityOverview() {
         </CardContent>
       </Card>
 
-      {/* Issue Distribution Chart */}
-      <Card className="h-full">
-        <CardHeader>
+      <Card className="h-full border-border/70 shadow-sm">
+        <CardHeader className="space-y-1">
           <CardTitle>
             {issuesSummary?.severity_distribution
-              ? "Issue Distribution"
-              : "Quality Distribution"}
+              ? "Issue distribution"
+              : "Quality distribution"}
           </CardTitle>
           <CardDescription>
             {issuesSummary?.severity_distribution
-              ? "Distribution of issues by severity level"
-              : "Distribution of datasets by quality score"}
+              ? "Share of issues by severity level."
+              : "Share of datasets by quality score band."}
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col justify-center min-h-[280px]">
+        <CardContent className="flex min-h-[280px] flex-col justify-center gap-5">
           {issueDistribution.length > 0 ? (
             <>
               <div className="h-48 w-full">
@@ -385,11 +335,8 @@ export function QualityOverview() {
                       paddingAngle={2}
                       dataKey="value"
                     >
-                      {issueDistribution.map((entry, index) => (
-                        <Cell
-                          key={`cell-${index}`}
-                          fill={COLORS[index % COLORS.length]}
-                        />
+                      {issueDistribution.map((entry) => (
+                        <Cell key={`cell-${entry.name}`} fill={entry.color} />
                       ))}
                     </Pie>
                     <Tooltip />
@@ -397,15 +344,18 @@ export function QualityOverview() {
                 </ResponsiveContainer>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 mt-4">
-                {issueDistribution.map((item, index) => (
-                  <div key={item.name} className="flex items-center space-x-2">
+              <div className="space-y-2">
+                {issueDistribution.map((item) => (
+                  <div
+                    key={item.name}
+                    className="flex items-center gap-3 rounded-lg border border-border/70 bg-background px-3 py-2"
+                  >
                     <div
                       className="h-3 w-3 rounded-full"
-                      style={{ backgroundColor: COLORS[index] }}
+                      style={{ backgroundColor: item.color }}
                     />
                     <span className="text-sm">{item.name}</span>
-                    <span className="text-sm text-muted-foreground ml-auto">
+                    <span className="ml-auto text-sm font-medium text-muted-foreground">
                       {item.value}%
                     </span>
                   </div>
@@ -413,14 +363,13 @@ export function QualityOverview() {
               </div>
             </>
           ) : (
-            <div className="flex items-center justify-center h-64">
-              <p className="text-sm text-muted-foreground">
-                No datasets available for quality analysis
-              </p>
-            </div>
+            <EmptyState
+              title="No data available"
+              description="No datasets available for quality analysis."
+            />
           )}
         </CardContent>
       </Card>
-    </MagicBentoWrapper>
+    </div>
   );
 }

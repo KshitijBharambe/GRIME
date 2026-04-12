@@ -1,0 +1,132 @@
+[
+  {
+    "name": "Email Format Validation",
+    "description": "Validates that email addresses follow the standard format (user@domain.com)",
+    "kind": "regex",
+    "criticality": "high",
+    "target_columns": ["email", "email_address", "contact_email"],
+    "params": {
+      "pattern": "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$",
+      "error_message": "Invalid email format"
+    }
+  },
+  {
+    "name": "Required Customer ID",
+    "description": "Ensures customer ID field is not null or empty",
+    "kind": "missing_data",
+    "criticality": "critical",
+    "target_columns": ["customer_id", "id", "user_id"],
+    "params": {
+      "allow_null": false,
+      "allow_empty": false,
+      "error_message": "Customer ID is required"
+    }
+  },
+  {
+    "name": "Phone Number Format",
+    "description": "Standardizes phone numbers to international format",
+    "kind": "standardization",
+    "criticality": "medium",
+    "target_columns": ["phone", "phone_number", "mobile", "contact_phone"],
+    "params": {
+      "format_pattern": "+{country_code}-{area_code}-{number}",
+      "default_country": "1",
+      "error_message": "Phone number format should be +1-XXX-XXX-XXXX"
+    }
+  },
+  {
+    "name": "Date Range Validation",
+    "description": "Validates that dates fall within expected ranges",
+    "kind": "value_list",
+    "criticality": "medium",
+    "target_columns": ["order_date", "created_date", "birth_date"],
+    "params": {
+      "min_date": "1900-01-01",
+      "max_date": "2030-12-31",
+      "error_message": "Date must be between 1900 and 2030"
+    }
+  },
+  {
+    "name": "Postal Code Format",
+    "description": "Validates postal/zip code formats for different countries",
+    "kind": "regex",
+    "criticality": "low",
+    "target_columns": ["postal_code", "zip_code", "zip"],
+    "params": {
+      "patterns": {
+        "US": "^\\d{5}(-\\d{4})?$",
+        "CA": "^[A-Za-z]\\d[A-Za-z] \\d[A-Za-z]\\d$",
+        "UK": "^[A-Za-z]{1,2}\\d[A-Za-z\\d]? \\d[A-Za-z]{2}$"
+      },
+      "error_message": "Invalid postal code format"
+    }
+  },
+  {
+    "name": "Name Character Restriction",
+    "description": "Ensures names contain only allowed characters",
+    "kind": "char_restriction",
+    "criticality": "medium",
+    "target_columns": ["first_name", "last_name", "full_name", "company_name"],
+    "params": {
+      "allowed_chars": "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ '-.",
+      "min_length": 1,
+      "max_length": 50,
+      "error_message": "Names can only contain letters, spaces, hyphens, apostrophes, and periods"
+    }
+  },
+  {
+    "name": "Amount Range Check",
+    "description": "Validates that monetary amounts are within reasonable ranges",
+    "kind": "length_range",
+    "criticality": "high",
+    "target_columns": ["amount", "price", "total", "cost"],
+    "params": {
+      "min_value": 0,
+      "max_value": 1000000,
+      "data_type": "decimal",
+      "error_message": "Amount must be between $0 and $1,000,000"
+    }
+  },
+  {
+    "name": "Gender Value List",
+    "description": "Ensures gender field contains only valid values",
+    "kind": "value_list",
+    "criticality": "low",
+    "target_columns": ["gender", "sex"],
+    "params": {
+      "valid_values": ["M", "F", "Male", "Female", "Other", "Prefer not to say", ""],
+      "case_sensitive": false,
+      "error_message": "Gender must be one of: M, F, Male, Female, Other, Prefer not to say"
+    }
+  },
+  {
+    "name": "Cross-Field Date Validation",
+    "description": "Ensures end dates are after start dates",
+    "kind": "cross_field",
+    "criticality": "high",
+    "target_columns": ["start_date", "end_date", "order_date", "ship_date"],
+    "params": {
+      "field_pairs": [
+        {"start": "start_date", "end": "end_date"},
+        {"start": "order_date", "end": "ship_date"},
+        {"start": "birth_date", "end": "hire_date"}
+      ],
+      "error_message": "End date must be after start date"
+    }
+  },
+  {
+    "name": "Custom Business Logic",
+    "description": "Custom validation for business-specific requirements",
+    "kind": "custom",
+    "criticality": "medium",
+    "target_columns": ["status", "category", "type"],
+    "params": {
+      "validation_function": "validate_business_logic",
+      "rules": {
+        "customer_type_status": "If customer_type is 'Premium', status must be 'Active'",
+        "order_amount_discount": "If order_amount > 1000, discount_rate must be <= 0.1"
+      },
+      "error_message": "Business logic validation failed"
+    }
+  }
+]

@@ -1,43 +1,49 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
-import json
+from uuid import uuid4
+import logging
 
 from app.database import get_session
-from app.models import User, Rule, RuleKind, Criticality, Execution, Issue
+from app.models import User, Rule, RuleKind, Execution, Issue
 from app.auth import (
-    get_any_authenticated_user, get_admin_user,
-    get_any_org_member_context, get_owner_or_admin_context,
-    OrgContext
+    get_any_authenticated_user,
+    get_admin_user,
+    get_any_org_member_context,
+    get_owner_or_admin_context,
+    OrgContext,
 )
 from app.middleware.organization import OrganizationFilter
 from app.schemas import (
-    RuleResponse, RuleCreate, RuleUpdate, ExecutionResponse,
-    IssueResponse, RuleTestRequest
+    RuleResponse,
+    RuleCreate,
+    RuleUpdate,
+    ExecutionResponse,
+    IssueResponse,
+    RuleTestRequest,
 )
 from app.services.rule_engine import RuleEngineService
 from app.services.rule_versioning import (
     create_rule_version,
-    update_rule_directly,
     get_rule_root_id,
-    has_rule_been_used,
-    promote_previous_version_to_latest
+    promote_previous_version_to_latest,
 )
 
 router = APIRouter(prefix="/rules", tags=["Business Rules"])
+
+logger = logging.getLogger(__name__)
 
 
 @router.get("", response_model=List[RuleResponse])
 async def list_rules(
     active_only: bool = Query(True, description="Filter to active rules only"),
-    latest_only: bool = Query(
-        True, description="Show only latest versions of rules"),
-    rule_kind: Optional[RuleKind] = Query(
-        None, description="Filter by rule kind"),
+    latest_only: bool = Query(True, description="Show only latest versions of rules"),
+    rule_kind: Optional[RuleKind] = Query(None, description="Filter by rule kind"),
     include_shared: bool = Query(
-        False, description="Include rules shared with this organization"),
+        False, description="Include rules shared with this organization"
+    ),
     db: Session = Depends(get_session),
-    org_context: OrgContext = Depends(get_any_org_member_context)
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """
     List all business rules within organization with optional filtering.
@@ -47,7 +53,8 @@ async def list_rules(
 
     # Filter by organization
     query = OrganizationFilter.filter_by_org(
-        query, Rule, org_context, include_shared=include_shared)
+        query, Rule, org_context, include_shared=include_shared
+    )
 
     # Filter to latest versions only (default behavior)
     if latest_only:
@@ -67,20 +74,20 @@ async def list_rules(
 async def get_rule(
     rule_id: str,
     db: Session = Depends(get_session),
-    org_context: OrgContext = Depends(get_any_org_member_context)
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """
     Get details of a specific rule within organization.
     """
     query = db.query(Rule).filter(Rule.id == rule_id)
     query = OrganizationFilter.filter_by_org(
-        query, Rule, org_context, include_shared=True)
+        query, Rule, org_context, include_shared=True
+    )
     rule = query.first()
 
     if not rule:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Rule not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Rule not found"
         )
 
     return RuleResponse.model_validate(rule)
@@ -90,7 +97,7 @@ async def get_rule(
 async def create_rule(
     rule_data: RuleCreate,
     db: Session = Depends(get_session),
-    org_context: OrgContext = Depends(get_owner_or_admin_context)  # Owner/Admin only
+    org_context: OrgContext = Depends(get_owner_or_admin_context),  # Owner/Admin only
 ):
     """
     Create a new business rule within organization (owner/admin only).
@@ -106,7 +113,7 @@ async def create_rule(
             target_columns=rule_data.target_columns,
             params=rule_data.params,
             current_user=org_context.user,
-            organization_id=org_context.organization_id
+            organization_id=org_context.organization_id,
         )
 
         return RuleResponse.model_validate(rule)
@@ -114,9 +121,11 @@ async def create_rule(
     except HTTPException:
         raise
     except Exception as e:
+        error_id = str(uuid4())
+        logger.error(f"Error creating rule [ref={error_id}]: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error creating rule: {str(e)}"
+            detail=f"Internal error. Reference: {error_id}",
         )
 
 
@@ -125,7 +134,7 @@ async def update_rule(
     rule_id: str,
     rule_data: RuleUpdate,
     db: Session = Depends(get_session),
-    org_context: OrgContext = Depends(get_owner_or_admin_context)
+    org_context: OrgContext = Depends(get_owner_or_admin_context),
 ):
     """
     Update an existing rule by creating a new version within organization.
@@ -137,8 +146,7 @@ async def update_rule(
 
     if not rule:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Rule not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Rule not found"
         )
 
     # Always create a new version to preserve history
@@ -150,7 +158,7 @@ async def update_rule(
 async def activate_rule(
     rule_id: str,
     db: Session = Depends(get_session),
-    org_context: OrgContext = Depends(get_owner_or_admin_context)
+    org_context: OrgContext = Depends(get_owner_or_admin_context),
 ):
     """
     Activate a rule by creating a new version with is_active=True.
@@ -162,8 +170,7 @@ async def activate_rule(
 
     if not rule:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Rule not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Rule not found"
         )
 
     # If already active, no need to create new version
@@ -177,7 +184,7 @@ async def activate_rule(
     return {
         "message": "Rule activated successfully",
         "rule_id": new_version.id,
-        "version": new_version.version
+        "version": new_version.version,
     }
 
 
@@ -185,7 +192,7 @@ async def activate_rule(
 async def deactivate_rule(
     rule_id: str,
     db: Session = Depends(get_session),
-    org_context: OrgContext = Depends(get_owner_or_admin_context)
+    org_context: OrgContext = Depends(get_owner_or_admin_context),
 ):
     """
     Deactivate a rule by creating a new version with is_active=False.
@@ -197,8 +204,7 @@ async def deactivate_rule(
 
     if not rule:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Rule not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Rule not found"
         )
 
     # If already inactive, no need to create new version
@@ -212,7 +218,7 @@ async def deactivate_rule(
     return {
         "message": "Rule deactivated successfully",
         "rule_id": new_version.id,
-        "version": new_version.version
+        "version": new_version.version,
     }
 
 
@@ -220,7 +226,7 @@ async def deactivate_rule(
 async def delete_rule(
     rule_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_admin_user)
+    current_user: User = Depends(get_admin_user),
 ):
     """
     Delete a rule.
@@ -230,8 +236,7 @@ async def delete_rule(
     rule = db.query(Rule).filter(Rule.id == rule_id).first()
     if not rule:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Rule not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Rule not found"
         )
 
     # Check if this is the latest version
@@ -255,7 +260,7 @@ async def delete_rule(
         "message": message,
         "rule_id": rule_id,
         "deleted": True,
-        "was_latest": is_latest
+        "was_latest": is_latest,
     }
 
 
@@ -264,7 +269,7 @@ async def test_rule(
     rule_id: str,
     test_data: RuleTestRequest,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    current_user: User = Depends(get_any_authenticated_user),
 ):
     """
     Test a rule against sample data
@@ -272,8 +277,7 @@ async def test_rule(
     rule = db.query(Rule).filter(Rule.id == rule_id).first()
     if not rule:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Rule not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Rule not found"
         )
 
     try:
@@ -290,7 +294,7 @@ async def test_rule(
         if not validator_class:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"No validator available for rule kind: {rule.kind}"
+                detail=f"No validator available for rule kind: {rule.kind}",
             )
 
         # Run validation
@@ -303,16 +307,20 @@ async def test_rule(
             "issues_found": len(issues),
             "sample_issues": issues[:10],  # Return first 10 issues
             "summary": {
-                "rows_with_issues": len(set(issue['row_index'] for issue in issues)),
-                "columns_with_issues": len(set(issue['column_name'] for issue in issues)),
-                "categories": list(set(issue['category'] for issue in issues))
-            }
+                "rows_with_issues": len({issue["row_index"] for issue in issues}),
+                "columns_with_issues": len({issue["column_name"] for issue in issues}),
+                "categories": list({issue["category"] for issue in issues}),
+            },
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
+        error_id = str(uuid4())
+        logger.error(f"Error testing rule [ref={error_id}]: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error testing rule: {str(e)}"
+            detail=f"Internal error. Reference: {error_id}",
         )
 
 
@@ -325,10 +333,7 @@ async def get_available_rule_kinds():
         {
             "kind": "missing_data",
             "description": "Detect missing or null values in required fields",
-            "example_params": {
-                "columns": ["column1", "column2"],
-                "default_value": ""
-            }
+            "example_params": {"columns": ["column1", "column2"], "default_value": ""},
         },
         {
             "kind": "standardization",
@@ -336,8 +341,8 @@ async def get_available_rule_kinds():
             "example_params": {
                 "columns": ["date_column"],
                 "type": "date",
-                "format": "%Y-%m-%d"
-            }
+                "format": "%Y-%m-%d",
+            },
         },
         {
             "kind": "value_list",
@@ -345,8 +350,8 @@ async def get_available_rule_kinds():
             "example_params": {
                 "columns": ["status"],
                 "allowed_values": ["active", "inactive"],
-                "case_sensitive": True
-            }
+                "case_sensitive": True,
+            },
         },
         {
             "kind": "length_range",
@@ -354,16 +359,13 @@ async def get_available_rule_kinds():
             "example_params": {
                 "columns": ["description"],
                 "min_length": 5,
-                "max_length": 100
-            }
+                "max_length": 100,
+            },
         },
         {
             "kind": "char_restriction",
             "description": "Restrict to specific character types",
-            "example_params": {
-                "columns": ["name"],
-                "type": "alphabetic"
-            }
+            "example_params": {"columns": ["name"], "type": "alphabetic"},
         },
         {
             "kind": "cross_field",
@@ -373,10 +375,10 @@ async def get_available_rule_kinds():
                     {
                         "type": "dependency",
                         "dependent_field": "state",
-                        "required_field": "country"
+                        "required_field": "country",
                     }
                 ]
-            }
+            },
         },
         {
             "kind": "regex",
@@ -387,10 +389,10 @@ async def get_available_rule_kinds():
                     {
                         "pattern": r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$",
                         "name": "email_format",
-                        "must_match": True
+                        "must_match": True,
                     }
-                ]
-            }
+                ],
+            },
         },
         {
             "kind": "custom",
@@ -399,9 +401,9 @@ async def get_available_rule_kinds():
                 "type": "python_expression",
                 "expression": "age >= 18",
                 "columns": ["age"],
-                "error_message": "Age must be 18 or older"
-            }
-        }
+                "error_message": "Age must be 18 or older",
+            },
+        },
     ]
 
 
@@ -410,7 +412,7 @@ async def get_rule_executions(
     rule_id: str,
     limit: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    current_user: User = Depends(get_any_authenticated_user),
 ):
     """
     Get execution history for a specific rule
@@ -418,15 +420,17 @@ async def get_rule_executions(
     rule = db.query(Rule).filter(Rule.id == rule_id).first()
     if not rule:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Rule not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Rule not found"
         )
 
-    executions = db.query(Execution).join(
-        Execution.execution_rules
-    ).filter_by(rule_id=rule_id).order_by(
-        Execution.started_at.desc()
-    ).limit(limit).all()
+    executions = (
+        db.query(Execution)
+        .join(Execution.execution_rules)
+        .filter_by(rule_id=rule_id)
+        .order_by(Execution.started_at.desc())
+        .limit(limit)
+        .all()
+    )
 
     return [ExecutionResponse.model_validate(execution) for execution in executions]
 
@@ -435,7 +439,7 @@ async def get_rule_executions(
 async def get_rule_versions(
     rule_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    current_user: User = Depends(get_any_authenticated_user),
 ):
     """
     Get all versions of a rule
@@ -444,17 +448,19 @@ async def get_rule_versions(
     rule = db.query(Rule).filter(Rule.id == rule_id).first()
     if not rule:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Rule not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Rule not found"
         )
 
     # Find the root rule (original)
     root_rule_id = get_rule_root_id(rule)
 
     # Get all versions
-    versions = db.query(Rule).filter(
-        (Rule.id == root_rule_id) | (Rule.parent_rule_id == root_rule_id)
-    ).order_by(Rule.version.desc()).all()
+    versions = (
+        db.query(Rule)
+        .filter((Rule.id == root_rule_id) | (Rule.parent_rule_id == root_rule_id))
+        .order_by(Rule.version.desc())
+        .all()
+    )
 
     return [RuleResponse.model_validate(v) for v in versions]
 
@@ -464,7 +470,7 @@ async def get_rule_version(
     rule_id: str,
     version_number: int,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    current_user: User = Depends(get_any_authenticated_user),
 ):
     """
     Get a specific version of a rule
@@ -473,22 +479,25 @@ async def get_rule_version(
     rule = db.query(Rule).filter(Rule.id == rule_id).first()
     if not rule:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Rule not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Rule not found"
         )
 
     root_rule_id = get_rule_root_id(rule)
 
     # Find the specific version
-    version = db.query(Rule).filter(
-        ((Rule.id == root_rule_id) | (Rule.parent_rule_id == root_rule_id)),
-        Rule.version == version_number
-    ).first()
+    version = (
+        db.query(Rule)
+        .filter(
+            ((Rule.id == root_rule_id) | (Rule.parent_rule_id == root_rule_id)),
+            Rule.version == version_number,
+        )
+        .first()
+    )
 
     if not version:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Version {version_number} not found"
+            detail=f"Version {version_number} not found",
         )
 
     return RuleResponse.model_validate(version)
@@ -497,11 +506,10 @@ async def get_rule_version(
 @router.get("/{rule_id}/issues", response_model=List[IssueResponse])
 async def get_rule_issues(
     rule_id: str,
-    resolved: Optional[bool] = Query(
-        None, description="Filter by resolution status"),
+    resolved: Optional[bool] = Query(None, description="Filter by resolution status"),
     limit: int = Query(50, ge=1, le=1000),
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    current_user: User = Depends(get_any_authenticated_user),
 ):
     """
     Get issues found by a specific rule
@@ -509,8 +517,7 @@ async def get_rule_issues(
     rule = db.query(Rule).filter(Rule.id == rule_id).first()
     if not rule:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Rule not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Rule not found"
         )
 
     query = db.query(Issue).filter(Issue.rule_id == rule_id)

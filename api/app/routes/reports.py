@@ -1,23 +1,38 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Response
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-from typing import List, Dict, Any, Optional
-import json
+from sqlalchemy import func as sa_func, case
+from typing import Optional
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
+from collections import defaultdict
 
 from app.database import get_session
 from app.models import (
-    User, Dataset, DatasetVersion, Export, ExportFormat, Issue, Fix, Execution
+    User,
+    Dataset,
+    DatasetVersion,
+    Export,
+    ExportFormat,
+    Issue,
+    Fix,
+    Execution,
+    ExecutionStatus,
+    Rule,
+    DataQualityMetrics,
 )
 from app.auth import (
-    get_any_authenticated_user, get_admin_user,
-    get_any_org_member_context, OrgContext
+    get_any_authenticated_user,
+    get_any_org_member_context,
+    OrgContext,
 )
-from app.middleware.organization import OrganizationFilter
-from app.schemas import ExportCreate, ExportResponse
 from app.services.export import ExportService
 from app.services.data_quality import DataQualityService
+from app.core.config import ErrorMessages
+from app.utils.logging_service import get_logger
+from uuid import uuid4
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/reports", tags=["Reports & Export"])
 
@@ -26,14 +41,11 @@ router = APIRouter(prefix="/reports", tags=["Reports & Export"])
 async def export_dataset(
     dataset_id: str,
     export_format: ExportFormat = Query(..., description="Export format"),
-    include_metadata: bool = Query(
-        True, description="Include dataset metadata"),
-    include_issues: bool = Query(
-        False, description="Include identified issues"),
-    execution_id: Optional[str] = Query(
-        None, description="Specific execution context"),
+    include_metadata: bool = Query(True, description="Include dataset metadata"),
+    include_issues: bool = Query(False, description="Include identified issues"),
+    execution_id: Optional[str] = Query(None, description="Specific execution context"),
     db: Session = Depends(get_session),
-    org_context: OrgContext = Depends(get_any_org_member_context)
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """
     Export a dataset in the specified format within organization
@@ -49,15 +61,19 @@ async def export_dataset(
         Export information with download details
     """
     # Check if dataset exists and belongs to organization
-    dataset = db.query(Dataset).filter(
-        Dataset.id == dataset_id,
-        Dataset.organization_id == org_context.organization_id
-    ).first()
+    dataset = (
+        db.query(Dataset)
+        .filter(
+            Dataset.id == dataset_id,
+            Dataset.organization_id == org_context.organization_id,
+        )
+        .first()
+    )
 
     if not dataset:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dataset not found"
+            detail=ErrorMessages.DATASET_NOT_FOUND,
         )
 
     # Get latest version
@@ -70,8 +86,7 @@ async def export_dataset(
 
     if not latest_version:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No dataset version found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="No dataset version found"
         )
 
     try:
@@ -82,12 +97,12 @@ async def export_dataset(
             user_id=org_context.user_id,
             execution_id=execution_id,
             include_metadata=include_metadata,
-            include_issues=include_issues
+            include_issues=include_issues,
         )
 
         # Determine actual file extension based on file path
-        actual_extension = file_path.split('.')[-1]  # Gets 'csv', 'zip', 'xlsx', etc.
-        
+        actual_extension = file_path.split(".")[-1]  # Gets 'csv', 'zip', 'xlsx', etc.
+
         return {
             "export_id": export_id,
             "dataset_id": dataset_id,
@@ -98,13 +113,17 @@ async def export_dataset(
             "file_path": file_path,
             "include_metadata": include_metadata,
             "include_issues": include_issues,
-            "download_url": f"/reports/exports/{export_id}/download"
+            "download_url": f"/reports/exports/{export_id}/download",
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
+        error_id = str(uuid4())
+        logger.error(f"Export failed [ref={error_id}]: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Export failed: {str(e)}"
+            detail=f"Internal error. Reference: {error_id}",
         )
 
 
@@ -112,21 +131,25 @@ async def export_dataset(
 async def get_export_history(
     dataset_id: str,
     db: Session = Depends(get_session),
-    org_context: OrgContext = Depends(get_any_org_member_context)
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """
     Get export history for a dataset within organization
     """
     # Check if dataset exists and belongs to organization
-    dataset = db.query(Dataset).filter(
-        Dataset.id == dataset_id,
-        Dataset.organization_id == org_context.organization_id
-    ).first()
+    dataset = (
+        db.query(Dataset)
+        .filter(
+            Dataset.id == dataset_id,
+            Dataset.organization_id == org_context.organization_id,
+        )
+        .first()
+    )
 
     if not dataset:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dataset not found"
+            detail=ErrorMessages.DATASET_NOT_FOUND,
         )
 
     try:
@@ -137,13 +160,19 @@ async def get_export_history(
             "dataset_id": dataset_id,
             "dataset_name": dataset.name,
             "total_exports": len(history),
-            "exports": history
+            "exports": history,
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
+        error_id = str(uuid4())
+        logger.error(
+            f"Failed to get export history [ref={error_id}]: {e}", exc_info=True
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get export history: {str(e)}"
+            detail=f"Internal error. Reference: {error_id}",
         )
 
 
@@ -151,50 +180,47 @@ async def get_export_history(
 async def download_export(
     export_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    current_user: User = Depends(get_any_authenticated_user),
 ):
     """
     Download an exported file
     """
     try:
         export_service = ExportService(db)
-        file_path, download_filename = export_service.get_export_file(
-            export_id)
+        file_path, download_filename = export_service.get_export_file(export_id)
 
         # Check if file exists
         if not Path(file_path).exists():
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Export file not found"
+                status_code=status.HTTP_404_NOT_FOUND, detail="Export file not found"
             )
-        
-        # Debug: Check file size
-        file_size = Path(file_path).stat().st_size
-        print(f"[DEBUG] Downloading file: {file_path}")
-        print(f"[DEBUG] File size: {file_size} bytes ({file_size / 1024:.2f} KB)")
 
         # Determine media type
-        if file_path.endswith('.csv'):
-            media_type = 'text/csv'
-        elif file_path.endswith('.xlsx'):
-            media_type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        elif file_path.endswith('.json'):
-            media_type = 'application/json'
-        elif file_path.endswith('.zip'):
-            media_type = 'application/zip'
+        if file_path.endswith(".csv"):
+            media_type = "text/csv"
+        elif file_path.endswith(".xlsx"):
+            media_type = (
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        elif file_path.endswith(".json"):
+            media_type = "application/json"
+        elif file_path.endswith(".zip"):
+            media_type = "application/zip"
         else:
-            media_type = 'application/octet-stream'
+            media_type = "application/octet-stream"
 
         return FileResponse(
-            path=file_path,
-            filename=download_filename,
-            media_type=media_type
+            path=file_path, filename=download_filename, media_type=media_type
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
+        error_id = str(uuid4())
+        logger.error(f"Download failed [ref={error_id}]: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Download failed: {str(e)}"
+            detail=f"Internal error. Reference: {error_id}",
         )
 
 
@@ -202,7 +228,7 @@ async def download_export(
 async def delete_export(
     export_id: str,
     db: Session = Depends(get_session),
-    org_context: OrgContext = Depends(get_any_org_member_context)
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """
     Delete an export and its associated file within organization
@@ -214,13 +240,17 @@ async def delete_export(
         return {
             "export_id": export_id,
             "deleted": success,
-            "message": "Export deleted successfully"
+            "message": "Export deleted successfully",
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
+        error_id = str(uuid4())
+        logger.error(f"Failed to delete export [ref={error_id}]: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete export: {str(e)}"
+            detail=f"Internal error. Reference: {error_id}",
         )
 
 
@@ -228,23 +258,28 @@ async def delete_export(
 async def generate_quality_report(
     dataset_id: str,
     include_charts: bool = Query(
-        False, description="Include visual charts (future feature)"),
+        False, description="Include visual charts (future feature)"
+    ),
     db: Session = Depends(get_session),
-    org_context: OrgContext = Depends(get_any_org_member_context)
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """
     Generate comprehensive data quality report for a dataset within organization
     """
     # Check if dataset exists and belongs to organization
-    dataset = db.query(Dataset).filter(
-        Dataset.id == dataset_id,
-        Dataset.organization_id == org_context.organization_id
-    ).first()
+    dataset = (
+        db.query(Dataset)
+        .filter(
+            Dataset.id == dataset_id,
+            Dataset.organization_id == org_context.organization_id,
+        )
+        .first()
+    )
 
     if not dataset:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dataset not found"
+            detail=ErrorMessages.DATASET_NOT_FOUND,
         )
 
     try:
@@ -252,7 +287,7 @@ async def generate_quality_report(
         export_id, file_path = export_service.export_data_quality_report(
             dataset_id=dataset_id,
             user_id=org_context.user_id,
-            include_charts=include_charts
+            include_charts=include_charts,
         )
 
         return {
@@ -262,13 +297,19 @@ async def generate_quality_report(
             "report_type": "data_quality_report",
             "file_path": file_path,
             "download_url": f"/reports/exports/{export_id}/download",
-            "include_charts": include_charts
+            "include_charts": include_charts,
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
+        error_id = str(uuid4())
+        logger.error(
+            f"Quality report generation failed [ref={error_id}]: {e}", exc_info=True
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Quality report generation failed: {str(e)}"
+            detail=f"Internal error. Reference: {error_id}",
         )
 
 
@@ -276,21 +317,25 @@ async def generate_quality_report(
 async def get_quality_summary(
     dataset_id: str,
     db: Session = Depends(get_session),
-    org_context: OrgContext = Depends(get_any_org_member_context)
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """
     Get real-time data quality summary for a dataset within organization
     """
     # Verify dataset belongs to organization
-    dataset = db.query(Dataset).filter(
-        Dataset.id == dataset_id,
-        Dataset.organization_id == org_context.organization_id
-    ).first()
+    dataset = (
+        db.query(Dataset)
+        .filter(
+            Dataset.id == dataset_id,
+            Dataset.organization_id == org_context.organization_id,
+        )
+        .first()
+    )
 
     if not dataset:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dataset not found"
+            detail=ErrorMessages.DATASET_NOT_FOUND,
         )
 
     try:
@@ -298,51 +343,70 @@ async def get_quality_summary(
         summary = data_quality_service.create_data_quality_summary(dataset_id)
         return summary
 
+    except HTTPException:
+        raise
     except Exception as e:
+        error_id = str(uuid4())
+        logger.error(
+            f"Failed to generate quality summary [ref={error_id}]: {e}", exc_info=True
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate quality summary: {str(e)}"
+            detail=f"Internal error. Reference: {error_id}",
         )
 
 
 @router.get("/dashboard/overview")
 async def get_dashboard_overview(
     db: Session = Depends(get_session),
-    org_context: OrgContext = Depends(get_any_org_member_context)
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """
     Get overview statistics for the dashboard within organization
     """
     try:
         # Basic counts - filtered by organization
-        total_datasets = db.query(Dataset).filter(
-            Dataset.organization_id == org_context.organization_id
-        ).count()
+        total_datasets = (
+            db.query(Dataset)
+            .filter(Dataset.organization_id == org_context.organization_id)
+            .count()
+        )
 
         # For executions and issues, filter through dataset relationship
-        org_datasets = db.query(Dataset.id).filter(
-            Dataset.organization_id == org_context.organization_id
-        ).subquery()
+        org_datasets = (
+            db.query(Dataset.id)
+            .filter(Dataset.organization_id == org_context.organization_id)
+            .subquery()
+        )
 
-        org_dataset_versions = db.query(DatasetVersion.id).filter(
-            DatasetVersion.dataset_id.in_(org_datasets)
-        ).subquery()
+        org_dataset_versions = (
+            db.query(DatasetVersion.id)
+            .filter(DatasetVersion.dataset_id.in_(org_datasets))
+            .subquery()
+        )
 
-        total_executions = db.query(Execution).filter(
-            Execution.dataset_version_id.in_(org_dataset_versions)
-        ).count()
+        total_executions = (
+            db.query(Execution)
+            .filter(Execution.dataset_version_id.in_(org_dataset_versions))
+            .count()
+        )
 
-        org_executions = db.query(Execution.id).filter(
-            Execution.dataset_version_id.in_(org_dataset_versions)
-        ).subquery()
+        org_executions = (
+            db.query(Execution.id)
+            .filter(Execution.dataset_version_id.in_(org_dataset_versions))
+            .subquery()
+        )
 
-        total_issues = db.query(Issue).filter(
-            Issue.execution_id.in_(org_executions)
-        ).count()
+        total_issues = (
+            db.query(Issue).filter(Issue.execution_id.in_(org_executions)).count()
+        )
 
-        total_fixes = db.query(Fix).join(Issue).filter(
-            Issue.execution_id.in_(org_executions)
-        ).count()
+        total_fixes = (
+            db.query(Fix)
+            .join(Issue)
+            .filter(Issue.execution_id.in_(org_executions))
+            .count()
+        )
 
         # Recent activity - filtered by organization
         recent_datasets = (
@@ -361,36 +425,142 @@ async def get_dashboard_overview(
             .all()
         )
 
-        # Quality statistics (optimized - from database only)
+        # Batch: issue counts for recent executions (avoid N+1 lazy loads)
+        recent_exec_ids = [e.id for e in recent_executions]
+        recent_issue_counts = {}
+        if recent_exec_ids:
+            recent_issue_counts = dict(
+                db.query(Issue.execution_id, sa_func.count(Issue.id))
+                .filter(Issue.execution_id.in_(recent_exec_ids))
+                .group_by(Issue.execution_id)
+                .all()
+            )
+
+        # Quality statistics (optimized - batch queries instead of per-dataset)
         # Using new DQI/CleanRowsPct/Hybrid metrics system
-        datasets = db.query(Dataset).filter(
-            Dataset.organization_id == org_context.organization_id
-        ).all()
+        datasets = (
+            db.query(Dataset)
+            .filter(Dataset.organization_id == org_context.organization_id)
+            .all()
+        )
+        dataset_ids = [d.id for d in datasets]
+
+        # Batch: latest version per dataset via SQL subquery (1 query, no Python dedup)
+        # Subquery: for each dataset_id, select the maximum version_no.
+        latest_version_no_sq = (
+            db.query(
+                DatasetVersion.dataset_id,
+                sa_func.max(DatasetVersion.version_no).label("max_version_no"),
+            )
+            .filter(DatasetVersion.dataset_id.in_(dataset_ids))
+            .group_by(DatasetVersion.dataset_id)
+            .subquery()
+        )
+        latest_versions = (
+            db.query(DatasetVersion)
+            .join(
+                latest_version_no_sq,
+                (DatasetVersion.dataset_id == latest_version_no_sq.c.dataset_id)
+                & (DatasetVersion.version_no == latest_version_no_sq.c.max_version_no),
+            )
+            .all()
+        ) if dataset_ids else []
+        version_by_dataset = {v.dataset_id: v for v in latest_versions}
+
+        # Batch: all executions for latest versions (1 query instead of N)
+        version_ids = [v.id for v in version_by_dataset.values()]
+        all_dv_executions = (
+            (
+                db.query(Execution)
+                .filter(Execution.dataset_version_id.in_(version_ids))
+                .order_by(Execution.started_at.desc())
+                .all()
+            )
+            if version_ids
+            else []
+        )
+        executions_by_version = defaultdict(list)
+        for e in all_dv_executions:
+            executions_by_version[e.dataset_version_id].append(e)
+
+        # Batch: quality metrics for all executions (1 query instead of N)
+        all_dv_exec_ids = [e.id for e in all_dv_executions]
+        metrics_by_execution = {}
+        if all_dv_exec_ids:
+            all_metrics = (
+                db.query(DataQualityMetrics)
+                .filter(DataQualityMetrics.execution_id.in_(all_dv_exec_ids))
+                .all()
+            )
+            metrics_by_execution = {m.execution_id: m for m in all_metrics}
+
+        # Single pass: collect quality scores + status distribution + quality score distribution
         dqi_scores = []
         clean_rows_pct_scores = []
         hybrid_scores = []
+        status_distribution = {}
+        quality_dist = {"excellent": 0, "good": 0, "fair": 0, "poor": 0}
+        data_quality_service = DataQualityService(db)
 
         for dataset in datasets:
-            try:
-                data_quality_service = DataQualityService(db)
-                summary = data_quality_service.create_data_quality_summary_from_db(
-                    dataset.id)
-                dqi_scores.append(summary.get("dqi", 0))
-                clean_rows_pct_scores.append(summary.get("clean_rows_pct", 0))
-                hybrid_scores.append(summary.get("hybrid", 0))
-            except:
+            # Always count status
+            dataset_status = dataset.status.value
+            status_distribution[dataset_status] = (
+                status_distribution.get(dataset_status, 0) + 1
+            )
+
+            # Try to get quality metrics from batch-loaded data
+            version = version_by_dataset.get(dataset.id)
+            if not version:
+                continue
+            execs = executions_by_version.get(version.id, [])
+            if not execs:
                 continue
 
-        avg_dqi = sum(dqi_scores) / len(dqi_scores) if dqi_scores else 0
-        avg_clean_rows_pct = sum(clean_rows_pct_scores) / len(clean_rows_pct_scores) if clean_rows_pct_scores else 0
-        avg_hybrid = sum(hybrid_scores) / len(hybrid_scores) if hybrid_scores else 0
+            latest_exec = execs[0]
+            metrics = metrics_by_execution.get(latest_exec.id)
 
-        # Dataset status distribution
-        status_distribution = {}
-        for dataset in datasets:
-            dataset_status = dataset.status.value
-            status_distribution[dataset_status] = status_distribution.get(
-                dataset_status, 0) + 1
+            dqi = 0.0
+            clean_rows_pct = 0.0
+            hybrid = 0.0
+
+            if metrics:
+                dqi = float(metrics.dqi)
+                clean_rows_pct = float(metrics.clean_rows_pct)
+                hybrid = float(metrics.hybrid)
+            else:
+                try:
+                    mr = data_quality_service.compute_quality_metrics(latest_exec.id)
+                    dqi = mr.dqi
+                    clean_rows_pct = mr.clean_rows_pct
+                    hybrid = mr.hybrid
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to compute quality metrics for dataset {dataset.id}: {e}"
+                    )
+                    continue
+
+            dqi_scores.append(dqi)
+            clean_rows_pct_scores.append(clean_rows_pct)
+            hybrid_scores.append(hybrid)
+
+            # Classify hybrid score in same pass
+            if hybrid >= 90:
+                quality_dist["excellent"] += 1
+            elif hybrid >= 70:
+                quality_dist["good"] += 1
+            elif hybrid >= 50:
+                quality_dist["fair"] += 1
+            else:
+                quality_dist["poor"] += 1
+
+        avg_dqi = sum(dqi_scores) / len(dqi_scores) if dqi_scores else 0
+        avg_clean_rows_pct = (
+            sum(clean_rows_pct_scores) / len(clean_rows_pct_scores)
+            if clean_rows_pct_scores
+            else 0
+        )
+        avg_hybrid = sum(hybrid_scores) / len(hybrid_scores) if hybrid_scores else 0
 
         return {
             "overview": {
@@ -401,7 +571,9 @@ async def get_dashboard_overview(
                 "avg_dqi": round(avg_dqi, 2),
                 "avg_clean_rows_pct": round(avg_clean_rows_pct, 2),
                 "avg_hybrid": round(avg_hybrid, 2),
-                "issues_fixed_rate": round((total_fixes / total_issues * 100) if total_issues > 0 else 0, 2)
+                "issues_fixed_rate": round(
+                    (total_fixes / total_issues * 100) if total_issues > 0 else 0, 2
+                ),
             },
             "recent_activity": {
                 "recent_datasets": [
@@ -409,7 +581,7 @@ async def get_dashboard_overview(
                         "id": dataset.id,
                         "name": dataset.name,
                         "status": dataset.status.value,
-                        "uploaded_at": dataset.uploaded_at
+                        "uploaded_at": dataset.uploaded_at,
                     }
                     for dataset in recent_datasets
                 ],
@@ -418,27 +590,29 @@ async def get_dashboard_overview(
                         "id": execution.id,
                         "dataset_version_id": execution.dataset_version_id,
                         "status": execution.status.value,
-                        "issues_found": len(execution.issues) if execution.issues else 0,
-                        "started_at": execution.started_at
+                        "issues_found": recent_issue_counts.get(execution.id, 0),
+                        "created_at": execution.started_at,
                     }
                     for execution in recent_executions
-                ]
+                ],
             },
             "statistics": {
                 "dataset_status_distribution": status_distribution,
-                "quality_score_distribution": {
-                    "excellent": len([s for s in hybrid_scores if s >= 90]),
-                    "good": len([s for s in hybrid_scores if 70 <= s < 90]),
-                    "fair": len([s for s in hybrid_scores if 50 <= s < 70]),
-                    "poor": len([s for s in hybrid_scores if s < 50])
-                }
-            }
+                "quality_score_distribution": quality_dist,
+            },
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
+        error_id = str(uuid4())
+        logger.error(
+            f"Failed to generate dashboard overview [ref={error_id}]: {e}",
+            exc_info=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate dashboard overview: {str(e)}"
+            detail=f"Internal error. Reference: {error_id}",
         )
 
 
@@ -446,7 +620,7 @@ async def get_dashboard_overview(
 async def get_quality_trends(
     days: int = Query(30, description="Number of days to analyze"),
     db: Session = Depends(get_session),
-    org_context: OrgContext = Depends(get_any_org_member_context)
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """
     Get data quality trends over time within organization
@@ -455,28 +629,47 @@ async def get_quality_trends(
         # Get executions from the last N days - filtered by organization
         start_date = datetime.now(timezone.utc) - timedelta(days=days)
 
-        org_datasets = db.query(Dataset.id).filter(
-            Dataset.organization_id == org_context.organization_id
-        ).subquery()
+        org_datasets = (
+            db.query(Dataset.id)
+            .filter(Dataset.organization_id == org_context.organization_id)
+            .subquery()
+        )
 
-        org_dataset_versions = db.query(DatasetVersion.id).filter(
-            DatasetVersion.dataset_id.in_(org_datasets)
-        ).subquery()
+        org_dataset_versions = (
+            db.query(DatasetVersion.id)
+            .filter(DatasetVersion.dataset_id.in_(org_datasets))
+            .subquery()
+        )
 
         executions = (
             db.query(Execution)
             .filter(
                 Execution.started_at >= start_date,
-                Execution.dataset_version_id.in_(org_dataset_versions)
+                Execution.dataset_version_id.in_(org_dataset_versions),
             )
             .order_by(Execution.started_at.asc())
             .all()
         )
 
-        # Group by date
+        # Batch: issue counts per execution (avoid N+1 lazy loads)
+        execution_ids = [e.id for e in executions]
+        issue_counts_by_exec = {}
+        if execution_ids:
+            issue_counts_by_exec = dict(
+                db.query(Issue.execution_id, sa_func.count(Issue.id))
+                .filter(Issue.execution_id.in_(execution_ids))
+                .group_by(Issue.execution_id)
+                .all()
+            )
+
+        # Single pass: group by date + compute summary stats
         trends = {}
+        total_issues_found = 0
+        total_succeeded = 0
+
         for execution in executions:
             date_key = execution.started_at.date().isoformat()
+            issue_count = issue_counts_by_exec.get(execution.id, 0)
 
             if date_key not in trends:
                 trends[date_key] = {
@@ -484,280 +677,366 @@ async def get_quality_trends(
                     "total_executions": 0,
                     "total_issues": 0,
                     "successful_executions": 0,
-                    "avg_execution_time": 0
+                    "avg_execution_time": 0,
                 }
 
             trends[date_key]["total_executions"] += 1
-            trends[date_key]["total_issues"] += len(execution.issues) if execution.issues else 0
+            trends[date_key]["total_issues"] += issue_count
+            total_issues_found += issue_count
 
-            if execution.status.value == "succeeded":
+            is_succeeded = execution.status.value == "succeeded"
+            if is_succeeded:
                 trends[date_key]["successful_executions"] += 1
+                total_succeeded += 1
 
             # Calculate duration from started_at and finished_at
             if execution.finished_at and execution.started_at:
-                duration = (execution.finished_at - execution.started_at).total_seconds()
+                duration = (
+                    execution.finished_at - execution.started_at
+                ).total_seconds()
                 current_avg = trends[date_key]["avg_execution_time"]
                 count = trends[date_key]["total_executions"]
                 trends[date_key]["avg_execution_time"] = (
-                    (current_avg * (count - 1) + duration) / count
-                )
+                    current_avg * (count - 1) + duration
+                ) / count
 
         # Calculate success rates
         for trend in trends.values():
             total = trend["total_executions"]
             successful = trend["successful_executions"]
-            trend["success_rate"] = (
-                successful / total * 100) if total > 0 else 0
+            trend["success_rate"] = (successful / total * 100) if total > 0 else 0
+
+        num_executions = len(executions)
 
         return {
             "analysis_period": {
                 "start_date": start_date.date().isoformat(),
                 "end_date": datetime.now(timezone.utc).date().isoformat(),
-                "days_analyzed": days
+                "days_analyzed": days,
             },
             "trends": list(trends.values()),
             "summary": {
-                "total_executions": len(executions),
-                "total_issues_found": sum(len(e.issues) if e.issues else 0 for e in executions),
+                "total_executions": num_executions,
+                "total_issues_found": total_issues_found,
                 "avg_issues_per_execution": (
-                    sum(len(e.issues) if e.issues else 0 for e in executions) / len(executions)
-                    if executions else 0
+                    total_issues_found / num_executions if num_executions else 0
                 ),
                 "overall_success_rate": (
-                    len([e for e in executions if e.status.value ==
-                        "succeeded"]) / len(executions) * 100
-                    if executions else 0
-                )
-            }
+                    total_succeeded / num_executions * 100 if num_executions else 0
+                ),
+            },
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
+        error_id = str(uuid4())
+        logger.error(
+            f"Failed to generate quality trends [ref={error_id}]: {e}", exc_info=True
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate quality trends: {str(e)}"
+            detail=f"Internal error. Reference: {error_id}",
         )
 
 
 @router.get("/datasets/quality-scores")
 async def get_all_datasets_quality_scores(
     db: Session = Depends(get_session),
-    org_context: OrgContext = Depends(get_any_org_member_context)
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """
     Get quality scores for all datasets within organization (optimized - uses DB aggregation only)
     """
     try:
-        datasets = db.query(Dataset).filter(
-            Dataset.organization_id == org_context.organization_id
-        ).all()
+        datasets = (
+            db.query(Dataset)
+            .filter(Dataset.organization_id == org_context.organization_id)
+            .all()
+        )
+        dataset_ids = [d.id for d in datasets]
+
+        # Batch: latest version per dataset via SQL subquery (1 query, no Python dedup)
+        latest_version_no_sq = (
+            db.query(
+                DatasetVersion.dataset_id,
+                sa_func.max(DatasetVersion.version_no).label("max_version_no"),
+            )
+            .filter(DatasetVersion.dataset_id.in_(dataset_ids))
+            .group_by(DatasetVersion.dataset_id)
+            .subquery()
+        )
+        latest_versions = (
+            db.query(DatasetVersion)
+            .join(
+                latest_version_no_sq,
+                (DatasetVersion.dataset_id == latest_version_no_sq.c.dataset_id)
+                & (DatasetVersion.version_no == latest_version_no_sq.c.max_version_no),
+            )
+            .all()
+        ) if dataset_ids else []
+        version_by_dataset = {v.dataset_id: v for v in latest_versions}
+
+        # Batch: all executions for latest versions (1 query instead of N)
+        version_ids = [v.id for v in version_by_dataset.values()]
+        all_executions = (
+            (
+                db.query(Execution)
+                .filter(Execution.dataset_version_id.in_(version_ids))
+                .order_by(Execution.started_at.desc())
+                .all()
+            )
+            if version_ids
+            else []
+        )
+        executions_by_version = defaultdict(list)
+        for e in all_executions:
+            executions_by_version[e.dataset_version_id].append(e)
+
+        # Batch: issue counts per execution (1 query instead of N*M)
+        all_exec_ids = [e.id for e in all_executions]
+        issue_counts_by_exec = {}
+        if all_exec_ids:
+            issue_counts_by_exec = dict(
+                db.query(Issue.execution_id, sa_func.count(Issue.id))
+                .filter(Issue.execution_id.in_(all_exec_ids))
+                .group_by(Issue.execution_id)
+                .all()
+            )
+
+        # Batch: fix counts per execution (1 query instead of N)
+        fix_counts_by_exec = {}
+        if all_exec_ids:
+            fix_counts_by_exec = dict(
+                db.query(Issue.execution_id, sa_func.count(Fix.id))
+                .join(Fix)
+                .filter(Issue.execution_id.in_(all_exec_ids))
+                .group_by(Issue.execution_id)
+                .all()
+            )
+
+        # Batch: quality metrics for all executions (1 query instead of N)
+        metrics_by_execution = {}
+        if all_exec_ids:
+            all_metrics = (
+                db.query(DataQualityMetrics)
+                .filter(DataQualityMetrics.execution_id.in_(all_exec_ids))
+                .all()
+            )
+            metrics_by_execution = {m.execution_id: m for m in all_metrics}
+
         quality_scores = []
+        data_quality_service = DataQualityService(db)
 
         for dataset in datasets:
             try:
-                # Get latest version for row count
-                latest_version = (
-                    db.query(DatasetVersion)
-                    .filter(DatasetVersion.dataset_id == dataset.id)
-                    .order_by(DatasetVersion.version_no.desc())
-                    .first()
-                )
-
+                latest_version = version_by_dataset.get(dataset.id)
                 if not latest_version:
                     continue
 
-                # Get all executions for this dataset
-                executions = (
-                    db.query(Execution)
-                    .filter(Execution.dataset_version_id == latest_version.id)
-                    .all()
-                )
+                execs = executions_by_version.get(latest_version.id, [])
 
-                # Calculate metrics from database
-                total_issues = sum(len(exec.issues) for exec in executions if exec.issues)
+                # Sum issue/fix counts from batch lookups
+                total_issues = sum(issue_counts_by_exec.get(e.id, 0) for e in execs)
+                total_fixes = sum(fix_counts_by_exec.get(e.id, 0) for e in execs)
 
-                # Get total fixes for this dataset's issues
-                execution_ids = [e.id for e in executions]
-                total_fixes = (
-                    db.query(Fix)
-                    .join(Issue)
-                    .filter(Issue.execution_id.in_(execution_ids))
-                    .count()
-                ) if execution_ids else 0
-
-                # Get quality metrics from the latest execution (new system)
+                # Get quality metrics from batch lookup
                 dqi = 0.0
                 clean_rows_pct = 0.0
                 hybrid = 0.0
 
-                if executions:
-                    from app.services.data_quality import DataQualityService
-                    from app.models import DataQualityMetrics
+                if execs:
+                    latest_execution = execs[0]
+                    metrics = metrics_by_execution.get(latest_execution.id)
 
-                    latest_execution = executions[0]
-                    # Try to get computed metrics from DataQualityMetrics table
-                    quality_metrics = db.query(DataQualityMetrics).filter(
-                        DataQualityMetrics.execution_id == latest_execution.id
-                    ).first()
-
-                    if quality_metrics:
-                        dqi = float(quality_metrics.dqi)
-                        clean_rows_pct = float(quality_metrics.clean_rows_pct)
-                        hybrid = float(quality_metrics.hybrid)
+                    if metrics:
+                        dqi = float(metrics.dqi)
+                        clean_rows_pct = float(metrics.clean_rows_pct)
+                        hybrid = float(metrics.hybrid)
                     else:
                         # Compute on-demand if not cached
                         try:
-                            data_quality_service = DataQualityService(db)
-                            metrics_response = data_quality_service.compute_quality_metrics(latest_execution.id)
+                            metrics_response = (
+                                data_quality_service.compute_quality_metrics(
+                                    latest_execution.id
+                                )
+                            )
                             dqi = metrics_response.dqi
                             clean_rows_pct = metrics_response.clean_rows_pct
                             hybrid = metrics_response.hybrid
-                        except:
+                        except Exception as e:
                             # If computation fails, default to 0
-                            pass
+                            logger.warning(
+                                f"Failed to compute quality metrics for execution {latest_execution.id}: {e}"
+                            )
 
-                quality_scores.append({
-                    "id": dataset.id,
-                    "name": dataset.name,
-                    "dqi": round(dqi, 2),
-                    "clean_rows_pct": round(clean_rows_pct, 2),
-                    "hybrid": round(hybrid, 2),
-                    "total_rows": latest_version.rows,
-                    "total_issues": total_issues,
-                    "total_fixes": total_fixes,
-                    "status": dataset.status.value
-                })
+                quality_scores.append(
+                    {
+                        "id": dataset.id,
+                        "name": dataset.name,
+                        "dqi": round(dqi, 2),
+                        "clean_rows_pct": round(clean_rows_pct, 2),
+                        "hybrid": round(hybrid, 2),
+                        "total_rows": latest_version.rows,
+                        "total_issues": total_issues,
+                        "total_fixes": total_fixes,
+                        "status": dataset.status.value,
+                    }
+                )
             except Exception as e:
                 # If we can't get quality data for a dataset, log and skip it
-                print(f"Warning: Could not get quality data for dataset {dataset.id}: {str(e)}")
+                logger.warning(
+                    f"Could not get quality data for dataset {dataset.id}: {e}"
+                )
                 continue
 
-        return {
-            "datasets": quality_scores,
-            "total_datasets": len(quality_scores)
-        }
+        return {"datasets": quality_scores, "total_datasets": len(quality_scores)}
 
+    except HTTPException:
+        raise
     except Exception as e:
+        error_id = str(uuid4())
+        logger.error(
+            f"Failed to get quality scores [ref={error_id}]: {e}", exc_info=True
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get quality scores: {str(e)}"
+            detail=f"Internal error. Reference: {error_id}",
         )
 
 
 @router.get("/analytics/issue-patterns")
 async def get_issue_patterns(
     db: Session = Depends(get_session),
-    org_context: OrgContext = Depends(get_any_org_member_context)
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """
     Analyze patterns in data quality issues within organization
     """
     try:
         # Get all issues within organization
-        org_datasets = db.query(Dataset.id).filter(
-            Dataset.organization_id == org_context.organization_id
-        ).subquery()
+        org_datasets = (
+            db.query(Dataset.id)
+            .filter(Dataset.organization_id == org_context.organization_id)
+            .subquery()
+        )
 
-        org_dataset_versions = db.query(DatasetVersion.id).filter(
-            DatasetVersion.dataset_id.in_(org_datasets)
-        ).subquery()
+        org_dataset_versions = (
+            db.query(DatasetVersion.id)
+            .filter(DatasetVersion.dataset_id.in_(org_datasets))
+            .subquery()
+        )
 
-        org_executions = db.query(Execution.id).filter(
-            Execution.dataset_version_id.in_(org_dataset_versions)
-        ).subquery()
+        org_executions = (
+            db.query(Execution.id)
+            .filter(Execution.dataset_version_id.in_(org_dataset_versions))
+            .subquery()
+        )
 
-        issues = db.query(Issue).filter(
-            Issue.execution_id.in_(org_executions)
-        ).all()
+        issues = db.query(Issue).filter(Issue.execution_id.in_(org_executions)).all()
 
         if not issues:
-            return {
-                "message": "No issues found for analysis",
-                "patterns": {}
+            return {"message": "No issues found for analysis", "patterns": {}}
+
+        # Batch: load all rules referenced by issues (1 query instead of N)
+        rule_ids = {i.rule_id for i in issues if i.rule_id}
+        rules_by_id = {}
+        if rule_ids:
+            rules = db.query(Rule).filter(Rule.id.in_(rule_ids)).all()
+            rules_by_id = {r.id: r for r in rules}
+
+        # Batch: load which issues have fixes (1 query instead of per-severity)
+        issue_ids = [i.id for i in issues]
+        fixed_issue_ids = set()
+        if issue_ids:
+            fixed_issue_ids = {
+                row[0]
+                for row in db.query(Fix.issue_id)
+                .filter(Fix.issue_id.in_(issue_ids))
+                .all()
             }
 
-        # Analyze patterns
-        patterns = {
-            "by_severity": {},
-            "by_column": {},
-            "by_rule_type": {},
-            "most_common_issues": [],
-            "fix_rates": {}
-        }
+        # Single pass: collect all aggregations at once
+        by_severity = {}
+        by_column = {}
+        by_rule_type = {}
+        message_counts = {}
+        severity_total = {}
+        severity_fixed = {}
 
-        # Group by severity
         for issue in issues:
             severity = issue.severity.value if issue.severity else "unknown"
-            patterns["by_severity"][severity] = patterns["by_severity"].get(
-                severity, 0) + 1
-
-        # Group by column
-        for issue in issues:
             column = issue.column_name or "unknown"
-            patterns["by_column"][column] = patterns["by_column"].get(
-                column, 0) + 1
-
-        # Get rule information for issues
-        for issue in issues:
-            if issue.rule_id:
-                from app.models import Rule
-                rule = db.query(Rule).filter(Rule.id == issue.rule_id).first()
-                if rule:
-                    rule_type = rule.kind.value
-                    patterns["by_rule_type"][rule_type] = patterns["by_rule_type"].get(
-                        rule_type, 0) + 1
-
-        # Most common issue messages
-        message_counts = {}
-        for issue in issues:
             msg = issue.message or "No message"
+
+            # Severity count
+            by_severity[severity] = by_severity.get(severity, 0) + 1
+
+            # Column count
+            by_column[column] = by_column.get(column, 0) + 1
+
+            # Rule type count (using batch-loaded rules)
+            if issue.rule_id and issue.rule_id in rules_by_id:
+                rule_type = rules_by_id[issue.rule_id].kind.value
+                by_rule_type[rule_type] = by_rule_type.get(rule_type, 0) + 1
+
+            # Message count
             message_counts[msg] = message_counts.get(msg, 0) + 1
 
-        patterns["most_common_issues"] = [
-            {"message": msg, "count": count}
-            for msg, count in sorted(message_counts.items(), key=lambda x: x[1], reverse=True)[:10]
-        ]
+            # Fix rates by severity (using batch-loaded fix data)
+            severity_total[severity] = severity_total.get(severity, 0) + 1
+            if issue.id in fixed_issue_ids:
+                severity_fixed[severity] = severity_fixed.get(severity, 0) + 1
 
-        # Fix rates by severity
-        for severity in patterns["by_severity"]:
-            severity_issues = [i for i in issues if (
-                i.severity.value if i.severity else "unknown") == severity]
-            severity_fixes = db.query(Fix).filter(
-                Fix.issue_id.in_([i.id for i in severity_issues])
-            ).count()
+        # Compute fix rates from accumulated counts
+        fix_rates = {}
+        for severity, total in severity_total.items():
+            fixed = severity_fixed.get(severity, 0)
+            fix_rates[severity] = round((fixed / total * 100) if total > 0 else 0, 2)
 
-            total_severity_issues = len(severity_issues)
-            fix_rate = (severity_fixes / total_severity_issues *
-                        100) if total_severity_issues > 0 else 0
-            patterns["fix_rates"][severity] = round(fix_rate, 2)
+        patterns = {
+            "by_severity": by_severity,
+            "by_column": by_column,
+            "by_rule_type": by_rule_type,
+            "most_common_issues": [
+                {"message": msg, "count": count}
+                for msg, count in sorted(
+                    message_counts.items(), key=lambda x: x[1], reverse=True
+                )[:10]
+            ],
+            "fix_rates": fix_rates,
+        }
 
         return {
             "total_issues_analyzed": len(issues),
             "patterns": patterns,
             "insights": {
                 "most_problematic_columns": sorted(
-                    patterns["by_column"].items(),
-                    key=lambda x: x[1],
-                    reverse=True
+                    patterns["by_column"].items(), key=lambda x: x[1], reverse=True
                 )[:5],
                 "most_common_rule_violations": sorted(
-                    patterns["by_rule_type"].items(),
-                    key=lambda x: x[1],
-                    reverse=True
-                )[:5]
-            }
+                    patterns["by_rule_type"].items(), key=lambda x: x[1], reverse=True
+                )[:5],
+            },
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
+        error_id = str(uuid4())
+        logger.error(
+            f"Failed to analyze issue patterns [ref={error_id}]: {e}", exc_info=True
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to analyze issue patterns: {str(e)}"
+            detail=f"Internal error. Reference: {error_id}",
         )
 
 
 @router.get("/system/health")
 async def get_system_health(
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)  # Admin only
+    current_user: User = Depends(get_any_authenticated_user),  # Admin only
 ):
     """
     Get system health metrics (admin only)
@@ -771,11 +1050,12 @@ async def get_system_health(
             "executions": db.query(Execution).count(),
             "issues": db.query(Issue).count(),
             "fixes": db.query(Fix).count(),
-            "exports": db.query(Export).count()
+            "exports": db.query(Export).count(),
         }
 
         # Storage health
         from app.services.data_import import DATASET_STORAGE_PATH
+
         storage_path = Path(DATASET_STORAGE_PATH)
 
         if storage_path.exists():
@@ -789,7 +1069,8 @@ async def get_system_health(
         if export_storage_path.exists():
             export_files = list(export_storage_path.glob("*"))
             export_storage_size = sum(
-                f.stat().st_size for f in export_files if f.is_file())
+                f.stat().st_size for f in export_files if f.is_file()
+            )
         else:
             export_files = []
             export_storage_size = 0
@@ -798,9 +1079,15 @@ async def get_system_health(
         recent_threshold = datetime.now(timezone.utc) - timedelta(hours=24)
 
         recent_activity = {
-            "recent_uploads": db.query(Dataset).filter(Dataset.uploaded_at >= recent_threshold).count(),
-            "recent_executions": db.query(Execution).filter(Execution.started_at >= recent_threshold).count(),
-            "recent_exports": db.query(Export).filter(Export.created_at >= recent_threshold).count()
+            "recent_uploads": db.query(Dataset)
+            .filter(Dataset.uploaded_at >= recent_threshold)
+            .count(),
+            "recent_executions": db.query(Execution)
+            .filter(Execution.started_at >= recent_threshold)
+            .count(),
+            "recent_exports": db.query(Export)
+            .filter(Export.created_at >= recent_threshold)
+            .count(),
         }
 
         return {
@@ -808,64 +1095,77 @@ async def get_system_health(
             "timestamp": datetime.now(timezone.utc),
             "database_health": {
                 "total_records": total_tables,
-                "connection_status": "connected"
+                "connection_status": "connected",
             },
             "storage_health": {
                 "dataset_files_count": len(dataset_files),
-                "total_dataset_storage_mb": round(total_storage_size / (1024 * 1024), 2),
+                "total_dataset_storage_mb": round(
+                    total_storage_size / (1024 * 1024), 2
+                ),
                 "export_files_count": len(export_files),
-                "total_export_storage_mb": round(export_storage_size / (1024 * 1024), 2),
+                "total_export_storage_mb": round(
+                    export_storage_size / (1024 * 1024), 2
+                ),
                 "storage_paths": {
                     "datasets": str(storage_path),
-                    "exports": str(export_storage_path)
-                }
+                    "exports": str(export_storage_path),
+                },
             },
             "activity_health": recent_activity,
             "performance_metrics": {
                 "avg_execution_time": _get_avg_execution_time(db),
-                "success_rate": _get_success_rate(db)
-            }
+                "success_rate": _get_success_rate(db),
+            },
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
+        error_id = str(uuid4())
+        logger.error(
+            f"Failed to get system health [ref={error_id}]: {e}", exc_info=True
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get system health: {str(e)}"
+            detail=f"Internal error. Reference: {error_id}",
         )
 
 
 def _get_avg_execution_time(db: Session) -> float:
     recent_threshold = datetime.now(timezone.utc) - timedelta(days=7)
-    recent_executions = (
-        db.query(Execution)
-        .filter(Execution.started_at >= recent_threshold)
-        .filter(Execution.finished_at.isnot(None))
-        .all()
+    # Aggregate entirely in SQL: EXTRACT(EPOCH FROM (finished_at - started_at)) gives
+    # the duration in seconds for each row; AVG aggregates across all qualifying rows.
+    result = (
+        db.query(
+            sa_func.avg(
+                sa_func.extract(
+                    "epoch", Execution.finished_at - Execution.started_at
+                )
+            )
+        )
+        .filter(
+            Execution.started_at >= recent_threshold,
+            Execution.finished_at.isnot(None),
+        )
+        .scalar()
     )
-
-    if not recent_executions:
-        return 0.0
-
-    total_time = sum(
-        (e.finished_at - e.started_at).total_seconds()
-        for e in recent_executions
-        if e.finished_at and e.started_at
-    )
-    return round(total_time / len(recent_executions), 2) if recent_executions else 0.0
+    return round(float(result), 2) if result is not None else 0.0
 
 
 def _get_success_rate(db: Session) -> float:
-    """Get success rate from recent executions"""
+    """Get success rate from recent executions — computed entirely in SQL."""
     recent_threshold = datetime.now(timezone.utc) - timedelta(days=7)
-    recent_executions = (
-        db.query(Execution)
+    # Single aggregate query: count total rows and count rows where status = 'succeeded'.
+    total, succeeded = (
+        db.query(
+            sa_func.count(Execution.id),
+            sa_func.sum(
+                case((Execution.status == ExecutionStatus.succeeded, 1), else_=0)
+            ),
+        )
         .filter(Execution.started_at >= recent_threshold)
-        .all()
+        .one()
     )
-
-    if not recent_executions:
+    if not total:
         return 100.0
-
-    successful = len(
-        [e for e in recent_executions if e.status.value == "succeeded"])
-    return round(successful / len(recent_executions) * 100, 2)
+    return round((int(succeeded or 0) / total) * 100, 2)

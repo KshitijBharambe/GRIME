@@ -45,6 +45,7 @@ import { Badge } from '@/components/ui/badge'
 import { UserPlus, Trash2, Mail, Loader2 } from 'lucide-react'
 import apiClient from '@/lib/api'
 import { UserRole } from '@/types/api'
+import { MainLayout } from '@/components/layout/main-layout'
 
 interface Member {
   id: string
@@ -199,14 +200,17 @@ export default function TeamManagementPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
+      <MainLayout>
+        <div className="flex items-center justify-center h-screen">
+          <Loader2 className="h-8 w-8 animate-spin" />
+        </div>
+      </MainLayout>
     )
   }
 
   return (
-    <div className="container mx-auto py-8 space-y-8">
+    <MainLayout>
+      <div className="container mx-auto py-8 space-y-8">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Team Management</h1>
@@ -440,6 +444,7 @@ export default function TeamManagementPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+      </div>
+    </MainLayout>
   )
 }

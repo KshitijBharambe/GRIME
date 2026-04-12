@@ -1,19 +1,65 @@
 """
-Application-wide constants for the Data Hygiene Toolkit
+Backward-compatibility shim – canonical definitions live in app.core.config.
 """
 
-# Criticality weights for DQI calculation
-# Used to weight rule importance in data quality metrics
-CRITICALITY_WEIGHTS = {
-    "low": 1,
-    "medium": 2,
-    "high": 3,
-    "critical": 5
-}
-
-# Metric status values
-METRIC_STATUS_OK = "ok"
-METRIC_STATUS_NOT_AVAILABLE = "not_available"
-
-# Default messages
-METRIC_NO_EXECUTION_MESSAGE = "Run an execution to calculate data quality"
+from app.core.config import (  # noqa: F401
+    CRITICALITY_WEIGHTS,
+    METRIC_STATUS_OK,
+    METRIC_STATUS_NOT_AVAILABLE,
+    METRIC_NO_EXECUTION_MESSAGE,
+    DatabaseTableRefs,
+    ErrorMessages,
+    # Statistical / Quality Analysis
+    IQR_Q1,
+    IQR_Q3,
+    IQR_MULTIPLIER,
+    FLOAT_COMPARISON_TOLERANCE,
+    CONSISTENCY_PENALTY_SCORE,
+    # Data Import
+    DEFAULT_IMPORT_CHUNK_SIZE,
+    MEMORY_THRESHOLD_MB,
+    LARGE_FILE_MEMORY_THRESHOLD_MB,
+    TYPE_INFERENCE_SAMPLE_SIZE,
+    # Anomaly Detection
+    DEFAULT_ANOMALY_THRESHOLD,
+    ANOMALY_SCORE_SCALE,
+    DEFAULT_ISOLATION_FOREST_ESTIMATORS,
+    DEFAULT_CONTAMINATION,
+    DEFAULT_SVM_NU,
+    DEFAULT_LOF_NEIGHBORS,
+    DEFAULT_RANDOM_STATE,
+    # Database
+    DB_POOL_SIZE,
+    DB_MAX_OVERFLOW,
+    DB_POOL_TIMEOUT_SECONDS,
+    DB_POOL_RECYCLE_SECONDS,
+    DB_STATEMENT_TIMEOUT_MS,
+    # Rate Limiting
+    RATE_LIMIT_WINDOW_SECONDS,
+    # Guest Limits
+    GUEST_SESSION_TTL_HOURS,
+    GUEST_UPLOAD_LIMIT,
+    GUEST_EXECUTION_LIMIT,
+    GUEST_MAX_FILE_SIZE_BYTES,
+    GUEST_CLEANUP_INTERVAL_SECONDS,
+    # Parallel Execution
+    MIN_RULES_FOR_PARALLEL,
+    MIN_DATASET_SIZE_FOR_PARALLEL,
+    MAX_MEMORY_MB_FOR_PARALLEL,
+    # Validation Limits
+    MAX_RULE_COLUMNS,
+    MAX_ALLOWED_VALUES,
+    DEFAULT_MAX_SUGGESTIONS,
+    # Payload / Request Body Limits
+    MAX_JSON_BODY_BYTES,
+    MAX_JSON_ARRAY_ITEMS,
+    MAX_JSON_KEY_LENGTH,
+    MAX_JSON_STRING_VALUE_LENGTH,
+    MAX_JSON_KEYS_PER_OBJECT,
+    MAX_FILENAME_LENGTH,
+    # Phone / IBAN
+    US_PHONE_DIGITS,
+    US_PHONE_WITH_COUNTRY_DIGITS,
+    IBAN_MIN_LENGTH,
+    IBAN_MAX_LENGTH,
+)

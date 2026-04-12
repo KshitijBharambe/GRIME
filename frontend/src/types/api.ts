@@ -64,7 +64,7 @@ export interface OrganizationInvite {
   id: string;
   email: string;
   role: UserRole;
-  status: 'pending' | 'accepted' | 'expired' | 'revoked';
+  status: "pending" | "accepted" | "expired" | "revoked";
   created_at: string;
   expires_at: string;
 }
@@ -120,6 +120,9 @@ export interface DatasetVersion {
   rows?: number;
   columns?: number;
   change_note?: string;
+  parent_version_id?: string;
+  source?: string;
+  file_path?: string;
 }
 
 export interface DatasetColumn {
@@ -211,35 +214,20 @@ export interface ExecutionCreate {
   rule_ids: string[];
 }
 
-// Issue types
-export interface Issue {
-  id: string;
-  execution_id: string;
-  rule_id: string;
-  rule_name?: string;
-  row_index: number;
-  column_name: string;
-  current_value?: string;
-  suggested_value?: string;
-  message?: string;
-  category?: string;
-  severity: Criticality;
-  created_at: string;
-  resolved: boolean;
-  fix_count: number;
-  dataset_name?: string;
-}
+// Issue types — canonical definitions live in @/types/issue.
+// Re-exported here so existing imports of `@/types/api` continue to work.
+export type {
+  Issue,
+  IssueCreate,
+  DetailedIssue,
+  IssuesSummary,
+  UnappliedFix,
+} from "./issue";
 
-export interface IssueCreate {
-  execution_id: string;
-  rule_id: string;
-  row_index: number;
-  column_name: string;
-  current_value?: string;
-  suggested_value?: string;
-  message?: string;
-  category?: string;
-  severity: Criticality;
+export interface ApplyFixesResponse {
+  new_version: DatasetVersion;
+  fixes_applied: number;
+  message: string;
 }
 
 // Fix types
@@ -399,4 +387,121 @@ export interface QualityMetrics {
   status: QualityMetricsStatus;
   message: string | null;
   computed_at: string;
+}
+
+// Compartment types (IAM)
+export interface Compartment {
+  id: string;
+  name: string;
+  description?: string;
+  organization_id: string;
+  parent_compartment_id?: string;
+  path: string;
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+  is_active: boolean;
+  children?: Compartment[];
+}
+
+export interface CompartmentCreate {
+  name: string;
+  description?: string;
+  parent_compartment_id?: string;
+}
+
+export interface CompartmentUpdate {
+  name?: string;
+  description?: string;
+  parent_compartment_id?: string;
+}
+
+export interface CompartmentMember {
+  id: string;
+  compartment_id: string;
+  user_id: string;
+  user_name: string;
+  user_email: string;
+  role: UserRole;
+  inherit_from_parent: boolean;
+  added_at: string;
+  added_by: string;
+  is_active: boolean;
+}
+
+export interface CompartmentMemberCreate {
+  user_email: string;
+  user_id?: string;
+  role: UserRole;
+  inherit_from_parent?: boolean;
+}
+
+// Access Request types
+export type RequestType =
+  | "password_change"
+  | "role_change"
+  | "compartment_access"
+  | "data_access";
+export type RequestStatus = "pending" | "approved" | "rejected" | "cancelled";
+
+export interface AccessRequest {
+  id: string;
+  organization_id: string;
+  request_type: RequestType;
+  status: RequestStatus;
+  requester_id: string;
+  requester_name?: string;
+  requester_email?: string;
+  required_approver_role: UserRole;
+  approver_id?: string;
+  approver_name?: string;
+  approved_at?: string;
+  rejected_at?: string;
+  request_data?: string; // JSON string
+  reason?: string;
+  admin_notes?: string;
+  created_at: string;
+  updated_at: string;
+  expires_at?: string;
+}
+
+export interface PasswordChangeRequest {
+  reason?: string;
+  new_password: string;
+}
+
+export interface AccessRequestApproval {
+  admin_notes?: string;
+}
+
+export interface AccessRequestCreate {
+  request_type: RequestType;
+  reason?: string;
+  request_data?: Record<string, unknown>;
+}
+
+// Account types for multi-auth support
+export type AccountType = "personal" | "organization" | "guest";
+
+export interface GuestLoginResponse {
+  user_id: string;
+  email: string;
+  organization_id: string;
+  access_token: string;
+  token_type: string;
+  expires_at: string;
+}
+
+export interface PersonalRegisterRequest {
+  email: string;
+  password: string;
+  full_name: string;
+}
+
+export interface PersonalRegisterResponse {
+  user_id: string;
+  email: string;
+  organization_id: string;
+  access_token: string;
+  token_type: string;
 }

@@ -7,16 +7,13 @@ import json
 import uuid
 import time
 import psutil
-import traceback
-from typing import List, Dict, Any, Optional, Callable
+from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
-from pathlib import Path
 import pandas as pd
 import numpy as np
 from sqlalchemy.orm import Session
-from functools import wraps
 
-from app.models import DebugSession, Execution, Rule
+from app.models import DebugSession
 from app.utils.logging_service import get_logger
 
 
@@ -256,87 +253,6 @@ class PerformanceProfiler:
         del self.profiles[profile_id]
 
         return results
-
-
-def debug_function(session_name: Optional[str] = None):
-    """Decorator to add debugging to functions"""
-    def decorator(func: Callable) -> Callable:
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            # Get debug session from kwargs or create one
-            debug_session = kwargs.get('debug_session')
-            if not debug_session:
-                return func(*args, **kwargs)
-
-            # Add execution trace
-            debug_session.add_execution_trace(
-                debug_session.id,
-                f"function_start",
-                {
-                    'function': func.__name__,
-                    'args_count': len(args),
-                    'kwargs_keys': list(kwargs.keys())
-                }
-            )
-
-            # Capture initial variable snapshot
-            if args:
-                debug_session.capture_variable_snapshot(
-                    debug_session.id,
-                    {f'arg_{i}': arg for i, arg in enumerate(
-                        args[:5])},  # Limit to first 5 args
-                    f"function_{func.__name__}_args"
-                )
-
-            start_time = time.time()
-            try:
-                result = func(*args, **kwargs)
-
-                # Capture result snapshot
-                debug_session.capture_variable_snapshot(
-                    debug_session.id,
-                    {'result': str(result)[:200]},  # Limit result string
-                    f"function_{func.__name__}_result"
-                )
-
-                # Add success trace
-                debug_session.add_execution_trace(
-                    debug_session.id,
-                    f"function_success",
-                    {
-                        'function': func.__name__,
-                        'duration': time.time() - start_time
-                    }
-                )
-
-                return result
-
-            except Exception as e:
-                # Capture error snapshot
-                debug_session.capture_variable_snapshot(
-                    debug_session.id,
-                    {
-                        'error': str(e),
-                        'traceback': traceback.format_exc()
-                    },
-                    f"function_{func.__name__}_error"
-                )
-
-                # Add error trace
-                debug_session.add_execution_trace(
-                    debug_session.id,
-                    f"function_error",
-                    {
-                        'function': func.__name__,
-                        'error': str(e),
-                        'duration': time.time() - start_time
-                    }
-                )
-
-                raise
-
-        return wrapper
-    return decorator
 
 
 class TestDataGenerator:

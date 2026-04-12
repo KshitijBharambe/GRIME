@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional, cast
-import json
 import re
-import mimetypes
+import logging
+from uuid import uuid4
 
 from app.database import get_session
 from app.models import User, Dataset, DatasetColumn
@@ -12,47 +12,161 @@ from app.schemas import DatasetResponse, DataProfileResponse, DatasetColumnRespo
 from app.services.data_import import DataImportService
 from app.utils import sanitize_input, validate_identifier
 from app.middleware.organization import OrganizationFilter
+from app.core.config import (
+    ErrorMessages,
+    MAX_FILE_SIZE_BYTES,
+    MAX_JSON_ARRAY_ITEMS,
+    MAX_JSON_KEY_LENGTH,
+    MAX_JSON_STRING_VALUE_LENGTH,
+    MAX_JSON_KEYS_PER_OBJECT,
+    MAX_FILENAME_LENGTH,
+)
 
 router = APIRouter(prefix="/data", tags=["Data Import"])
+
+logger = logging.getLogger(__name__)
 
 ALLOWED_EXTENSIONS = {".csv", ".xlsx", ".xls", ".txt"}
 ALLOWED_MIME_TYPES = {
     "text/csv",
     "application/vnd.ms-excel",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "text/plain"
+    "text/plain",
 }
 
-def is_allowed_file(filename: str, content_type: str) -> bool:
+# Characters permitted in sanitized filenames
+_SAFE_FILENAME_RE = re.compile(r"^[a-zA-Z0-9_.-]+$")
+
+
+def _validate_filename(filename: str) -> str:
+    """Validate and sanitize an upload filename.
+
+    Checks length, characters, double extensions, and path-traversal patterns.
+    Returns the sanitized name or raises HTTPException.
     """
-    Check if the file is allowed based on its extension and MIME type.
-    """
-    # Check file extension
-    ext = "." + filename.split('.')[-1].lower()
+    if not filename or not filename.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File must have a filename",
+        )
+
+    if len(filename) > MAX_FILENAME_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Filename exceeds maximum length of {MAX_FILENAME_LENGTH} characters",
+        )
+
+    # Reject path traversal
+    if ".." in filename or "/" in filename or "\\" in filename:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Filename contains illegal path characters",
+        )
+
+    # Reject double extensions (e.g. file.csv.exe)
+    if len(filename.split(".")) > 2:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Filename must not contain multiple extensions",
+        )
+
+    # Sanitize to safe characters
+    sanitized = re.sub(r"[^a-zA-Z0-9_.-]", "_", filename)
+    return sanitized
+
+
+def _validate_content_type(filename: str, content_type: str | None) -> None:
+    """Validate file extension and MIME type."""
+    ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     if ext not in ALLOWED_EXTENSIONS:
-        return False
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File extension '{ext}' is not supported. "
+            f"Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
+        )
+    if content_type and content_type not in ALLOWED_MIME_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File MIME type is not supported.",
+        )
 
-    # Check MIME type
-    if content_type not in ALLOWED_MIME_TYPES:
-        return False
 
-    # Check for double extensions
-    if len(filename.split('.')) > 2:
-        return False
+async def _read_file_with_size_limit(
+    file: UploadFile, max_bytes: int = MAX_FILE_SIZE_BYTES
+) -> bytes:
+    """Read upload file contents while enforcing a hard size cap.
 
-    return True
-
-def sanitize_filename(filename: str) -> str:
+    This streams the file in chunks so that we never buffer more than
+    ``max_bytes + chunk`` before rejecting the request — even when the
+    client omits or lies about Content-Length.
     """
-    Sanitize the filename to prevent security risks.
+    chunks: list[bytes] = []
+    total = 0
+    chunk_size = 256 * 1024  # 256 KB
+
+    while True:
+        chunk = await file.read(chunk_size)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"File size exceeds {max_bytes // (1024 * 1024)}MB limit",
+            )
+        chunks.append(chunk)
+
+    return b"".join(chunks)
+
+
+def _validate_json_payload(data: List[Dict[str, Any]]) -> None:
+    """Deep-validate a JSON array payload for size / complexity limits.
+
+    Checks:
+    - Total number of records
+    - Number of keys per record
+    - Key name length
+    - String value length
     """
-    # Remove potentially malicious characters
-    sanitized_filename = re.sub(r'[^a-zA-Z0-9_.-]', '_', filename)
+    if len(data) > MAX_JSON_ARRAY_ITEMS:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"JSON data exceeds {MAX_JSON_ARRAY_ITEMS:,} records limit",
+        )
 
-    # Prevent path traversal
-    sanitized_filename = sanitized_filename.replace("../", "")
+    for idx, record in enumerate(data):
+        if not isinstance(record, dict):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Record at index {idx} is not a JSON object",
+            )
 
-    return sanitized_filename
+        if len(record) > MAX_JSON_KEYS_PER_OBJECT:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"Record at index {idx} has {len(record)} keys, "
+                    f"exceeding the limit of {MAX_JSON_KEYS_PER_OBJECT}"
+                ),
+            )
+
+        for key, value in record.items():
+            if len(key) > MAX_JSON_KEY_LENGTH:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        f"Key '{key[:50]}…' in record {idx} exceeds "
+                        f"the maximum key length of {MAX_JSON_KEY_LENGTH}"
+                    ),
+                )
+            if isinstance(value, str) and len(value) > MAX_JSON_STRING_VALUE_LENGTH:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        f"Value for key '{key}' in record {idx} exceeds "
+                        f"the maximum string length of {MAX_JSON_STRING_VALUE_LENGTH:,}"
+                    ),
+                )
 
 
 def _sanitize_identifier(value: str, field_name: str) -> str:
@@ -60,10 +174,8 @@ def _sanitize_identifier(value: str, field_name: str) -> str:
         return validate_identifier(value, field_name=field_name)
     except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid {field_name}"
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid {field_name}"
         )
-
 
 
 @router.post("/upload/file", response_model=Dict[str, Any])
@@ -72,7 +184,7 @@ async def upload_file(
     dataset_name: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
     db: Session = Depends(get_session),
-    org_context: OrgContext = Depends(get_any_org_member_context)
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """
     Upload and process a CSV or Excel file within organization context.
@@ -81,39 +193,39 @@ async def upload_file(
         dataset_name = sanitize_input(dataset_name)
     if description:
         description = sanitize_input(description)
-    # Validate file size (limit to 50MB)
-    MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 
-    if file.size is not None and file.size > MAX_FILE_SIZE:
+    # --- Filename validation (before touching file content) ---
+    sanitized_filename = _validate_filename(file.filename or "")
+
+    # --- Content-type / extension validation ---
+    _validate_content_type(sanitized_filename, file.content_type)
+
+    # --- Early size gate using Content-Length header (cheap check) ---
+    if file.size is not None and file.size > MAX_FILE_SIZE_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="File size exceeds 50MB limit"
+            detail=f"File size exceeds {MAX_FILE_SIZE_BYTES // (1024 * 1024)}MB limit",
         )
 
-    # Validate file type and sanitize filename
-    if file.filename is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="File must have a filename"
-        )
+    # --- Streaming size-limited read (defends against missing/spoofed Content-Length) ---
+    file_bytes = await _read_file_with_size_limit(file)
 
-    if not is_allowed_file(file.filename, file.content_type):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"File type not supported or filename is insecure."
-        )
+    # Reset the file with the validated bytes so downstream can re-read
+    from io import BytesIO
 
-    sanitized_filename = sanitize_filename(file.filename)
+    file.file = BytesIO(file_bytes)
     file.filename = sanitized_filename
 
     # Process the file with organization context
     import_service = DataImportService(db)
-    result = await import_service.import_file(file, org_context.user, dataset_name, org_context.organization_id)
+    result = await import_service.import_file(
+        file, org_context.user, dataset_name, org_context.organization_id
+    )
 
     return {
         "message": "File uploaded and processed successfully",
-        "dataset": result['dataset'],
-        "profile": result['profile']
+        "dataset": result["dataset"],
+        "profile": result["profile"],
     }
 
 
@@ -123,7 +235,7 @@ async def upload_json_data(
     data: List[Dict[str, Any]],
     description: Optional[str] = None,
     db: Session = Depends(get_session),
-    org_context: OrgContext = Depends(get_any_org_member_context)
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """
     Upload JSON data directly within organization context.
@@ -134,37 +246,37 @@ async def upload_json_data(
         description = sanitize_input(description)
     if not data:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="JSON data cannot be empty"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="JSON data cannot be empty"
         )
 
-    if len(data) > 100000:  # Limit to 100k records
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="JSON data exceeds 100,000 records limit"
-        )
+    # Validate payload structure, sizes, and complexity
+    _validate_json_payload(data)
 
     # Process the JSON data with organization context
     import_service = DataImportService(db)
-    result = import_service.import_json_data(data, org_context.user, dataset_name, org_context.organization_id)
+    result = import_service.import_json_data(
+        data, org_context.user, dataset_name, org_context.organization_id
+    )
 
     return {
         "message": "JSON data processed successfully",
-        "dataset": result['dataset'],
-        "profile": result['profile']
+        "dataset": result["dataset"],
+        "profile": result["profile"],
     }
 
 
 @router.get("/datasets", response_model=List[DatasetResponse])
 async def list_datasets(
     db: Session = Depends(get_session),
-    org_context: OrgContext = Depends(get_any_org_member_context)
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """
     List all datasets accessible to the current organization.
     """
     query = db.query(Dataset)
-    query = OrganizationFilter.filter_by_org(query, Dataset, org_context, include_shared=False)
+    query = OrganizationFilter.filter_by_org(
+        query, Dataset, org_context, include_shared=False
+    )
     datasets = query.all()
     return [DatasetResponse.model_validate(dataset) for dataset in datasets]
 
@@ -173,7 +285,7 @@ async def list_datasets(
 async def get_dataset(
     dataset_id: str,
     db: Session = Depends(get_session),
-    org_context: OrgContext = Depends(get_any_org_member_context)
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """
     Get details of a specific dataset within organization.
@@ -181,13 +293,15 @@ async def get_dataset(
     dataset_id = _sanitize_identifier(dataset_id, "dataset_id")
 
     query = db.query(Dataset).filter(Dataset.id == dataset_id)
-    query = OrganizationFilter.filter_by_org(query, Dataset, org_context, include_shared=False)
+    query = OrganizationFilter.filter_by_org(
+        query, Dataset, org_context, include_shared=False
+    )
     dataset = query.first()
 
     if not dataset:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dataset not found"
+            detail=ErrorMessages.DATASET_NOT_FOUND,
         )
 
     return DatasetResponse.model_validate(dataset)
@@ -197,7 +311,8 @@ async def get_dataset(
 async def delete_dataset(
     dataset_id: str,
     db: Session = Depends(get_session),
-    org_context: OrgContext = Depends(get_any_org_member_context)
+    current_user: User = Depends(get_any_authenticated_user),
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """
     Delete a dataset within organization (owner/admin only).
@@ -205,25 +320,35 @@ async def delete_dataset(
     dataset_id = _sanitize_identifier(dataset_id, "dataset_id")
 
     query = db.query(Dataset).filter(Dataset.id == dataset_id)
-    query = OrganizationFilter.filter_by_org(query, Dataset, org_context, include_shared=False)
+    query = OrganizationFilter.filter_by_org(
+        query, Dataset, org_context, include_shared=False
+    )
     dataset = query.first()
     if not dataset:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dataset not found"
+            detail=ErrorMessages.DATASET_NOT_FOUND,
         )
 
     # Check permissions
-    from app.models import UserRole, DatasetVersion, DatasetColumn, Execution, Issue, ExecutionRule
+    from app.models import (
+        UserRole,
+        DatasetVersion,
+        DatasetColumn,
+        Execution,
+        Issue,
+        ExecutionRule,
+    )
+
     # Cast to Dataset type to help type checker
     dataset = cast(Dataset, dataset)
-    uploaded_by_id = str(getattr(dataset, 'uploaded_by', ''))
+    uploaded_by_id = str(getattr(dataset, "uploaded_by", ""))
     current_user_id = str(current_user.id)
-    user_role = getattr(current_user, 'role', None)
+    user_role = getattr(current_user, "role", None)
     if uploaded_by_id != current_user_id and user_role != UserRole.admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have permission to delete this dataset"
+            detail="You don't have permission to delete this dataset",
         )
 
     try:
@@ -231,19 +356,25 @@ async def delete_dataset(
         from app.models import Fix, Export
 
         # 1. Get all dataset versions
-        dataset_versions = db.query(DatasetVersion).filter(
-            DatasetVersion.dataset_id == dataset_id
-        ).all()
+        dataset_versions = (
+            db.query(DatasetVersion)
+            .filter(DatasetVersion.dataset_id == dataset_id)
+            .all()
+        )
 
         for version in dataset_versions:
             # Get all executions for this version
-            executions = db.query(Execution).filter(
-                Execution.dataset_version_id == version.id
-            ).all()
+            executions = (
+                db.query(Execution)
+                .filter(Execution.dataset_version_id == version.id)
+                .all()
+            )
 
             for execution in executions:
                 # Get all issues for this execution
-                issues = db.query(Issue).filter(Issue.execution_id == execution.id).all()
+                issues = (
+                    db.query(Issue).filter(Issue.execution_id == execution.id).all()
+                )
 
                 # Delete fixes for each issue
                 for issue in issues:
@@ -253,19 +384,25 @@ async def delete_dataset(
                 db.query(Issue).filter(Issue.execution_id == execution.id).delete()
 
                 # Delete execution rules
-                db.query(ExecutionRule).filter(ExecutionRule.execution_id == execution.id).delete()
+                db.query(ExecutionRule).filter(
+                    ExecutionRule.execution_id == execution.id
+                ).delete()
 
                 # Delete exports for this execution
                 db.query(Export).filter(Export.execution_id == execution.id).delete()
 
             # Delete executions
-            db.query(Execution).filter(Execution.dataset_version_id == version.id).delete()
+            db.query(Execution).filter(
+                Execution.dataset_version_id == version.id
+            ).delete()
 
             # Delete exports for this version
             db.query(Export).filter(Export.dataset_version_id == version.id).delete()
 
         # 2. Delete dataset versions
-        db.query(DatasetVersion).filter(DatasetVersion.dataset_id == dataset_id).delete()
+        db.query(DatasetVersion).filter(
+            DatasetVersion.dataset_id == dataset_id
+        ).delete()
 
         # 3. Delete dataset columns
         db.query(DatasetColumn).filter(DatasetColumn.dataset_id == dataset_id).delete()
@@ -273,8 +410,11 @@ async def delete_dataset(
         # 4. Delete the dataset file from storage
         from app.services.data_import import DATASET_STORAGE_PATH
         import os
+
         for version in dataset_versions:
-            file_path = DATASET_STORAGE_PATH / f"{dataset_id}_v{version.version_no}.parquet"
+            file_path = (
+                DATASET_STORAGE_PATH / f"{dataset_id}_v{version.version_no}.parquet"
+            )
             if file_path.exists():
                 os.remove(file_path)
 
@@ -290,17 +430,21 @@ async def delete_dataset(
 
     except Exception as e:
         db.rollback()
+        error_id = str(uuid4())
+        logger.error(f"Failed to delete dataset [ref={error_id}]: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete dataset: {str(e)}"
+            detail=f"Internal error. Reference: {error_id}",
         )
 
 
-@router.get("/datasets/{dataset_id}/columns", response_model=List[DatasetColumnResponse])
+@router.get(
+    "/datasets/{dataset_id}/columns", response_model=List[DatasetColumnResponse]
+)
 async def get_dataset_columns(
     dataset_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    current_user: User = Depends(get_any_authenticated_user),
 ):
     """
     Get columns for a specific dataset
@@ -311,11 +455,16 @@ async def get_dataset_columns(
     if not dataset:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dataset not found"
+            detail=ErrorMessages.DATASET_NOT_FOUND,
         )
 
     # Get dataset columns
-    columns = db.query(DatasetColumn).filter(DatasetColumn.dataset_id == dataset_id).order_by(DatasetColumn.ordinal_position).all()
+    columns = (
+        db.query(DatasetColumn)
+        .filter(DatasetColumn.dataset_id == dataset_id)
+        .order_by(DatasetColumn.ordinal_position)
+        .all()
+    )
     return [DatasetColumnResponse.model_validate(column) for column in columns]
 
 
@@ -323,7 +472,7 @@ async def get_dataset_columns(
 async def get_dataset_profile(
     dataset_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    current_user: User = Depends(get_any_authenticated_user),
 ):
     """
     Get comprehensive data profile for a dataset
@@ -334,16 +483,21 @@ async def get_dataset_profile(
     if not dataset:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dataset not found"
+            detail=ErrorMessages.DATASET_NOT_FOUND,
         )
 
     # Get dataset columns
-    columns = db.query(DatasetColumn).filter(DatasetColumn.dataset_id == dataset_id).order_by(DatasetColumn.ordinal_position).all()
+    columns = (
+        db.query(DatasetColumn)
+        .filter(DatasetColumn.dataset_id == dataset_id)
+        .order_by(DatasetColumn.ordinal_position)
+        .all()
+    )
 
     # Build data types summary
     data_types_summary = {}
     for column in columns:
-        col_type = column.inferred_type or 'unknown'
+        col_type = column.inferred_type or "unknown"
         data_types_summary[col_type] = data_types_summary.get(col_type, 0) + 1
 
     # For now, create basic missing values summary
@@ -355,5 +509,5 @@ async def get_dataset_profile(
         total_columns=dataset.column_count or 0,
         columns=[DatasetColumnResponse.model_validate(column) for column in columns],
         data_types_summary=data_types_summary,
-        missing_values_summary=missing_values_summary
+        missing_values_summary=missing_values_summary,
     )

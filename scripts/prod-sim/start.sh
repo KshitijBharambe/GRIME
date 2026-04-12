@@ -10,6 +10,11 @@
 
 set -e
 
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+REPO_ROOT=$(cd -- "$SCRIPT_DIR/../.." && pwd)
+COMPOSE_FILE="$REPO_ROOT/docker/compose/docker-compose.prod-sim.yml"
+COMPOSE_CMD=(docker compose -f "$COMPOSE_FILE")
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -23,16 +28,18 @@ echo -e "${BLUE}═════════════════════�
 echo ""
 
 # Check if .env.prod-sim exists
+cd "$REPO_ROOT"
+
 if [ ! -f .env.prod-sim ]; then
     echo -e "${YELLOW}⚠ .env.prod-sim not found${NC}"
     echo ""
     echo -e "${GREEN}Creating from template...${NC}"
 
-    if [ -f .env.example ]; then
-        cp .env.example .env.prod-sim
-        echo -e "${GREEN}✓ Created .env.prod-sim from .env.example${NC}"
+    if [ -f .env.prod-sim.example ]; then
+        cp .env.prod-sim.example .env.prod-sim
+        echo -e "${GREEN}✓ Created .env.prod-sim from .env.prod-sim.example${NC}"
     else
-        echo -e "${RED}✗ Error: .env.example not found${NC}"
+        echo -e "${RED}✗ Error: .env.prod-sim.example not found${NC}"
         echo "Please create .env.prod-sim manually"
         exit 1
     fi
@@ -75,9 +82,9 @@ else
     echo -e "${GREEN}✓ Docker found${NC}"
 fi
 
-if ! command -v docker-compose &> /dev/null; then
-    echo -e "${RED}✗ Docker Compose not found${NC}"
-    echo "Please install Docker Compose"
+if ! docker compose version &> /dev/null; then
+    echo -e "${RED}✗ Docker Compose not available${NC}"
+    echo "Please install a Docker version with 'docker compose' support"
     exit 1
 else
     echo -e "${GREEN}✓ Docker Compose found${NC}"
@@ -93,7 +100,7 @@ if docker ps | grep -q "prodsim-"; then
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         echo -e "${BLUE}Stopping existing containers...${NC}"
-        docker-compose -f docker-compose.prod-sim.yml down
+        "${COMPOSE_CMD[@]}" down
         echo -e "${GREEN}✓ Stopped${NC}"
         echo ""
     else
@@ -107,13 +114,13 @@ fi
 # Build containers
 echo -e "${BLUE}Building containers...${NC}"
 echo -e "${YELLOW}This may take a few minutes on first run...${NC}"
-docker-compose -f docker-compose.prod-sim.yml build
+"${COMPOSE_CMD[@]}" build
 echo -e "${GREEN}✓ Build complete${NC}"
 echo ""
 
 # Start containers
 echo -e "${BLUE}Starting production simulation environment...${NC}"
-docker-compose -f docker-compose.prod-sim.yml --env-file .env.prod-sim up -d
+"${COMPOSE_CMD[@]}" --env-file .env.prod-sim up -d
 echo -e "${GREEN}✓ Services started${NC}"
 echo ""
 

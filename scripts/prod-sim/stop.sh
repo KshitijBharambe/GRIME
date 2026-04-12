@@ -11,6 +11,13 @@
 
 set -e
 
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+REPO_ROOT=$(cd -- "$SCRIPT_DIR/../.." && pwd)
+COMPOSE_FILE="$REPO_ROOT/docker/compose/docker-compose.prod-sim.yml"
+COMPOSE_CMD=(docker compose -f "$COMPOSE_FILE")
+
+cd "$REPO_ROOT"
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -49,10 +56,10 @@ fi
 echo -e "${BLUE}Stopping production simulation containers...${NC}"
 
 if [ "$CLEAN_MODE" = true ]; then
-    docker-compose -f docker-compose.prod-sim.yml down -v
+    "${COMPOSE_CMD[@]}" down -v
     echo -e "${GREEN}✓ Containers stopped and volumes removed${NC}"
 else
-    docker-compose -f docker-compose.prod-sim.yml down
+    "${COMPOSE_CMD[@]}" down
     echo -e "${GREEN}✓ Containers stopped (volumes preserved)${NC}"
 fi
 

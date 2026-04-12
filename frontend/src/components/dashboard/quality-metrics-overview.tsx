@@ -10,32 +10,22 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Gauge, TrendingUp, CheckCircle, AlertCircle } from "lucide-react";
-import { useExecutions, useExecutionQualityMetrics } from "@/lib/hooks/useExecutions";
-import { MagicBentoWrapper } from "@/components/MagicBentoWrapper";
+import {
+  useExecutions,
+  useExecutionQualityMetrics,
+} from "@/lib/hooks/useExecutions";
 import { cn } from "@/lib/utils";
-
-function getScoreColor(score: number): string {
-  if (score >= 80) return "text-green-600";
-  if (score >= 60) return "text-yellow-600";
-  if (score >= 40) return "text-orange-600";
-  return "text-red-600";
-}
-
-function getScoreBgColor(score: number): string {
-  if (score >= 80) return "bg-green-100";
-  if (score >= 60) return "bg-yellow-100";
-  if (score >= 40) return "bg-orange-100";
-  return "bg-red-100";
-}
-
-function getScoreBadgeVariant(score: number): "default" | "secondary" | "destructive" | "outline" {
-  if (score >= 80) return "default";
-  if (score >= 60) return "secondary";
-  return "destructive";
-}
+import {
+  getScoreColor,
+  getScoreBgColor,
+  getScoreBadgeVariant,
+} from "@/lib/utils/score";
 
 export function QualityMetricsOverview() {
-  const { data: executionsData, isLoading: executionsLoading } = useExecutions(1, 5);
+  const { data: executionsData, isLoading: executionsLoading } = useExecutions(
+    1,
+    5,
+  );
   const latestExecution = executionsData?.items?.[0];
 
   const { data: qualityMetrics, isLoading: metricsLoading } =
@@ -57,7 +47,7 @@ export function QualityMetricsOverview() {
         </CardHeader>
         <CardContent className="space-y-4">
           {[...Array(3)].map((_, index) => (
-            <div key={index} className="space-y-2">
+            <div key={`skeleton-quality-${index}`} className="space-y-2">
               <div className="flex items-center justify-between">
                 <div className="h-4 w-32 bg-muted animate-pulse rounded" />
                 <div className="h-6 w-16 bg-muted animate-pulse rounded" />
@@ -97,7 +87,11 @@ export function QualityMetricsOverview() {
     );
   }
 
-  const avgScore = (qualityMetrics.dqi + qualityMetrics.clean_rows_pct + qualityMetrics.hybrid) / 3;
+  const avgScore =
+    (qualityMetrics.dqi +
+      qualityMetrics.clean_rows_pct +
+      qualityMetrics.hybrid) /
+    3;
 
   const metrics = [
     {
@@ -121,19 +115,7 @@ export function QualityMetricsOverview() {
   ];
 
   return (
-    <MagicBentoWrapper
-      textAutoHide={true}
-      enableStars={false}
-      enableSpotlight={true}
-      enableBorderGlow={true}
-      enableTilt={false}
-      enableMagnetism={false}
-      clickEffect={true}
-      spotlightRadius={300}
-      particleCount={12}
-      glowColor="132, 0, 255"
-      gridColumns="grid-cols-1"
-    >
+    <>
       <Card>
         <CardHeader>
           <div className="flex items-start justify-between">
@@ -146,26 +128,41 @@ export function QualityMetricsOverview() {
                 Data quality scores from most recent execution
               </CardDescription>
             </div>
-            <Badge variant={getScoreBadgeVariant(avgScore)} className="text-base px-3 py-1">
+            <Badge
+              variant={getScoreBadgeVariant(avgScore)}
+              className="text-base px-3 py-1"
+            >
               {avgScore.toFixed(1)}%
             </Badge>
           </div>
         </CardHeader>
         <CardContent className="space-y-5">
           {metrics.map((metric) => (
-            <div key={metric.label} className="space-y-2">
+            <div key={metric.fullLabel} className="space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className={cn("p-1.5 rounded-lg", getScoreBgColor(metric.value))}>
+                  <div
+                    className={cn(
+                      "p-1.5 rounded-lg",
+                      getScoreBgColor(metric.value),
+                    )}
+                  >
                     {metric.icon}
                   </div>
                   <div>
                     <p className="text-sm font-medium">{metric.label}</p>
-                    <p className="text-xs text-muted-foreground">{metric.fullLabel}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {metric.fullLabel}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className={cn("text-2xl font-bold", getScoreColor(metric.value))}>
+                  <span
+                    className={cn(
+                      "text-2xl font-bold",
+                      getScoreColor(metric.value),
+                    )}
+                  >
                     {metric.value.toFixed(1)}%
                   </span>
                 </div>
@@ -183,6 +180,6 @@ export function QualityMetricsOverview() {
           )}
         </CardContent>
       </Card>
-    </MagicBentoWrapper>
+    </>
   );
 }

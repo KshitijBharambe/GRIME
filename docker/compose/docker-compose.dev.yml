@@ -1,11 +1,11 @@
 # ============================================================================
 # Docker Compose - Development Profile
 # Data Hygiene Toolkit
-# 
+#
 # Usage: docker compose -f docker/compose/docker-compose.yml \
 #                       -f docker/compose/docker-compose.dev.yml up
 # Or use: make dev
-# 
+#
 # Features:
 # - Hot reload for backend and frontend
 # - Source code mounted as volumes
@@ -48,11 +48,12 @@ services:
       target: development
     environment:
       NODE_ENV: development
+      # NEXTAUTH_SECRET is loaded from ../../.env via env_file in base compose
     volumes:
       # Mount source code for hot reload
       - ../../frontend:/app
-      - /app/node_modules  # Prevent overwriting node_modules
-      - /app/.next         # Prevent overwriting .next build cache
+      - /app/node_modules # Prevent overwriting node_modules
+      - /app/.next # Prevent overwriting .next build cache
     command: >
       sh -c "
       echo '🔥 Starting frontend in development mode with hot reload...';
@@ -63,16 +64,20 @@ services:
   # PostgreSQL - Development Overrides
   # ==========================================================================
   postgres:
+    environment:
+      # Dev password — must be set in .env (no default; fail loudly if missing)
+      # POSTGRES_PASSWORD will be loaded from ../../.env (env_file on base compose)
     ports:
-      - "5432:5432"  # Expose for external connections (e.g., DBeaver, psql)
+      - "127.0.0.1:5432:5432" # Expose for local connections only (e.g., DBeaver, psql)
 
   # ==========================================================================
-  # MinIO - Development Overrides  
+  # MinIO - Development Overrides
   # ==========================================================================
   minio:
+    # Credentials are loaded from ../../.env via env_file in the base compose
     ports:
-      - "9000:9000"   # API
-      - "9001:9001"   # Console
+      - "127.0.0.1:9000:9000" # API
+      - "127.0.0.1:9001:9001" # Console
 
 # ============================================================================
 # Networks - Development Configuration

@@ -497,9 +497,9 @@ export default function RuleDetailPage({
                 <CardContent className="space-y-4">
                   <div className="grid gap-4 md:grid-cols-2">
                     <div>
-                      <label className="text-sm font-medium text-muted-foreground">
+                      <div className="text-sm font-medium text-muted-foreground">
                         Type
-                      </label>
+                      </div>
                       <div className="mt-1">
                         <Badge variant="outline">
                           {ruleKindLabels[rule.kind] || rule.kind}
@@ -507,9 +507,9 @@ export default function RuleDetailPage({
                       </div>
                     </div>
                     <div>
-                      <label className="text-sm font-medium text-muted-foreground">
+                      <div className="text-sm font-medium text-muted-foreground">
                         Criticality
-                      </label>
+                      </div>
                       <div className="mt-1">
                         <Badge className={criticalityColors[rule.criticality]}>
                           {rule.criticality}
@@ -519,9 +519,9 @@ export default function RuleDetailPage({
                   </div>
 
                   <div>
-                    <label className="text-sm font-medium text-muted-foreground">
+                    <div className="text-sm font-medium text-muted-foreground">
                       Target Columns
-                    </label>
+                    </div>
                     <div className="mt-1">
                       <code className="text-sm bg-muted px-2 py-1 rounded">
                         {Array.isArray(rule.target_columns)
@@ -533,9 +533,9 @@ export default function RuleDetailPage({
 
                   {rule.params && (
                     <div>
-                      <label className="text-sm font-medium text-muted-foreground">
+                      <div className="text-sm font-medium text-muted-foreground">
                         Parameters
-                      </label>
+                      </div>
                       <div className="mt-1">
                         <pre className="text-sm bg-muted p-3 rounded overflow-x-auto">
                           {JSON.stringify(rule.params, null, 2)}

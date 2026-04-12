@@ -1,281 +1,701 @@
 "use client";
 
-import { useEffect, useRef, useMemo, useCallback, memo } from "react";
+import { useEffect, useRef, useMemo, useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   ArrowRight,
-  Database,
-  Shield,
+  Upload,
+  BookOpen,
+  BarChart3,
+  AlertTriangle,
+  Users,
+  Check,
+  Star,
+  Twitter,
+  Github,
+  Linkedin,
+  Play,
   Zap,
-  TrendingUp,
-  Cpu,
-  Server,
 } from "lucide-react";
 import { gsap } from "gsap";
 import dynamic from "next/dynamic";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 
-// Lazy load the heavy LiquidEther component
 const LiquidEther = dynamic(() => import("./LiquidEther"), {
   ssr: false,
-  loading: () => <div className="w-full h-full bg-black" />,
+  loading: () => <div className="w-full h-full bg-[#0b1220]" />,
 });
 
-// Memoized Feature Card component
-const FeatureCard = memo(({ feature, index }: { feature: typeof features[0]; index: number }) => {
-  const Icon = feature.icon;
-  return (
-    <div
-      key={index}
-      className="feature-card relative bg-gray-900/40 backdrop-blur-sm border border-purple-500/30 rounded-3xl p-8 hover:bg-gray-800/50 transition-all duration-500 overflow-hidden group hover:shadow-purple-500/20 hover:shadow-xl"
-    >
-      {/* Subtle corner glow effect */}
-      <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/20 rounded-full blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+/* ------------------------------------------------------------------ */
+/*  Data                                                               */
+/* ------------------------------------------------------------------ */
 
-      <div className="w-16 h-16 bg-gradient-to-br from-purple-600 to-cyan-500 rounded-xl flex items-center justify-center mb-6 shadow-xl group-hover:shadow-purple-700/50 transition-shadow">
-        <Icon className="h-8 w-8 text-white" />
-      </div>
-      <h3 className="text-2xl font-bold text-white mb-3">
-        {feature.title}
-      </h3>
-      <p className="text-gray-400 leading-relaxed text-base">
-        {feature.description}
-      </p>
-    </div>
-  );
-});
-
-FeatureCard.displayName = 'FeatureCard';
-
-// Static features data moved outside component to prevent recreation
-const features = [
+const featureTabs = [
   {
-    icon: Database,
-    title: "Smart Data Processing",
+    id: "profiling",
+    label: "Corpus Profiling",
+    icon: BarChart3,
+    headline: "Know Your Training Data Before It Trains Your Model",
     description:
-      "Comprehensive algorithms automatically detect and clean data inconsistencies in real-time.",
+      "Auto-profile any dataset — CSV, JSON, Parquet. Surface null rates, duplicate rows, token distributions, and schema drift before they corrupt your model.",
+    benefits: [
+      "Column-level stats & histograms",
+      "Duplicate & near-duplicate detection",
+      "Schema drift alerts",
+      "Export-ready audit reports",
+    ],
   },
   {
-    icon: Shield,
-    title: "Uncompromising Security",
+    id: "rules",
+    label: "Quality Rules",
+    icon: BookOpen,
+    headline: "Codify What 'Good Data' Means for Your Use Case",
     description:
-      "Enterprise-grade security with end-to-end encryption and global compliance standards.",
+      "Build validation rules with the Zero-Code Block Builder or write custom expressions. Version, share, and reuse rule sets across datasets.",
+    benefits: [
+      "Zero-Code block builder",
+      "Custom expression language",
+      "Version control & rule history",
+      "Reusable rule libraries",
+    ],
   },
   {
+    id: "execution",
+    label: "Batch Validation",
     icon: Zap,
-    title: "Hyper-Performance Engine",
+    headline: "Validate Millions of Rows Before Fine-Tuning",
     description:
-      "Process billions of records in moments with our optimized, cloud-native processing engine.",
+      "Parallel execution engine processes your entire annotation set or LLM output log in minutes. Get instant pass/fail results with row-level traceability.",
+    benefits: [
+      "Parallel execution at any scale",
+      "Row-level violation details",
+      "Severity classification",
+      "Incremental re-validation",
+    ],
   },
   {
-    icon: TrendingUp,
-    title: "Actionable Quality Scores",
+    id: "anomalies",
+    label: "Anomaly Detection",
+    icon: AlertTriangle,
+    headline: "Catch Outliers That Rules Miss",
     description:
-      "Instantly quantify data integrity with easy-to-understand, actionable quality metrics.",
+      "Train Isolation Forest, One-Class SVM, or LOF models on any dataset version. Flag statistically unusual rows before they bias your fine-tune.",
+    benefits: [
+      "Isolation Forest & LOF models",
+      "Train on any dataset version",
+      "Per-row anomaly scores",
+      "Auto-flag before training runs",
+    ],
   },
   {
-    icon: Cpu,
-    title: "AI-Powered Anomaly Detection",
+    id: "collaboration",
+    label: "Team & Governance",
+    icon: Users,
+    headline: "Data Quality Is a Team Sport",
     description:
-      "Detect subtle outliers and emerging patterns of bad data using advanced machine learning.",
-  },
-  {
-    icon: Server,
-    title: "Scalable Deployment",
-    description:
-      "Deploy on any cloud or on-premise infrastructure to handle massive datasets effortlessly.",
+      "Compartments, role-based access, and approval workflows keep your org's data governance tight — even across large annotation teams.",
+    benefits: [
+      "Compartment-based access control",
+      "Approval workflows for data changes",
+      "Full audit trail",
+      "Guest sandbox for contractors",
+    ],
   },
 ];
+
+const steps = [
+  {
+    number: "01",
+    title: "Ingest",
+    description:
+      "Upload CSV/JSON/Parquet or connect Snowflake, MongoDB, Google Sheets. Auto-profiled on arrival.",
+    icon: Upload,
+  },
+  {
+    number: "02",
+    title: "Define Rules",
+    description:
+      "Use the Zero-Code Block Builder or expressions. Rules are versioned and reusable.",
+    icon: BookOpen,
+  },
+  {
+    number: "03",
+    title: "Run & Find Issues",
+    description:
+      "Parallel execution flags every violation. Issues classified by severity — ready for your team to fix.",
+    icon: Zap,
+  },
+  {
+    number: "04",
+    title: "Train & Ship",
+    description:
+      "Run anomaly models on clean data. Export validated datasets directly to your training pipeline.",
+    icon: BarChart3,
+  },
+];
+
+const stats = [
+  { value: "50M+", label: "Rows Validated" },
+  { value: "99.9%", label: "Uptime" },
+  { value: "300+", label: "AI Teams" },
+  { value: "5M+", label: "Issues Detected" },
+];
+
+const testimonials = [
+  {
+    quote:
+      "DATAFORGE cut our annotation QA time by 80%. We caught 40K bad training examples before fine-tuning — our model accuracy jumped 6 points.",
+    author: "Anika Mehra",
+    role: "ML Lead, Synthesis AI",
+  },
+  {
+    quote:
+      "The anomaly detection models flagged subtle distribution shifts in our LLM eval set that our manual checks completely missed.",
+    author: "Jordan Tse",
+    role: "AI Data Engineer, NeuralWorks",
+  },
+  {
+    quote:
+      "We run DATAFORGE on every dataset version before training. It's the quality gate that ships with our MLOps pipeline now.",
+    author: "Carlos Rivas",
+    role: "Head of AI Infra, Apex Labs",
+  },
+];
+
+/* ------------------------------------------------------------------ */
+/*  Component                                                          */
+/* ------------------------------------------------------------------ */
 
 export default function LandingPage() {
   const router = useRouter();
   const heroRef = useRef<HTMLDivElement>(null);
-  const featuresRef = useRef<HTMLDivElement>(null);
+  const [activeTab, setActiveTab] = useState("profiling");
 
-  // Memoize navigation handlers
+  const handleGetStarted = useCallback(() => {
+    router.push("/auth/register");
+  }, [router]);
+
   const handleSignIn = useCallback(() => {
     router.push("/auth/login");
   }, [router]);
 
-  const handleStartCleaning = useCallback(() => {
-    router.push("/auth/login");
-  }, [router]);
+  const scrollToFeatures = useCallback(() => {
+    document.getElementById("features")?.scrollIntoView({ behavior: "smooth" });
+  }, []);
 
+  /* GSAP entrance animations */
   useEffect(() => {
     const ctx = gsap.context(() => {
-      // Simpler, lighter animations
-      gsap.fromTo(
-        ".nav-item",
-        { y: -20, opacity: 0 },
-        { y: 0, opacity: 1, duration: 0.5, stagger: 0.1, ease: "power2.out" }
-      );
       gsap.fromTo(
         ".hero-title",
-        { y: 50, opacity: 0 },
-        { y: 0, opacity: 1, duration: 0.8, ease: "power2.out" }
+        { y: 40, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.8, ease: "power2.out" },
       );
-
       gsap.fromTo(
-        ".hero-subtitle",
+        ".hero-sub",
         { y: 30, opacity: 0 },
-        { y: 0, opacity: 1, duration: 0.6, delay: 0.2, ease: "power2.out" }
+        { y: 0, opacity: 1, duration: 0.6, delay: 0.15, ease: "power2.out" },
       );
-
       gsap.fromTo(
-        ".hero-button",
+        ".hero-cta",
         { y: 20, opacity: 0 },
         {
           y: 0,
           opacity: 1,
           duration: 0.5,
-          delay: 0.4,
+          delay: 0.3,
           stagger: 0.1,
           ease: "power2.out",
-        }
-      );
-
-      // Simpler feature cards animation
-      gsap.fromTo(
-        ".feature-card",
-        { y: 30, opacity: 0 },
-        { y: 0, opacity: 1, duration: 0.5, stagger: 0.1, delay: 0.8 }
+        },
       );
     }, heroRef);
-
     return () => ctx.revert();
   }, []);
 
-  // Memoize LiquidEther props
-  const liquidEtherProps = useMemo(() => ({
-    colors: ["#5227FF", "#00F0FF", "#B19EEF"],
-    mouseForce: 30,
-    cursorSize: 140,
-    isViscous: true,
-    viscous: 100,
-    iterationsViscous: 32,
-    iterationsPoisson: 32,
-    resolution: 0.4,
-    isBounce: true,
-    autoDemo: false,
-    autoSpeed: 0.5,
-    autoIntensity: 2.2,
-    takeoverDuration: 0.1,
-    autoResumeDelay: 3000,
-    autoRampDuration: 0.8,
-  }), []);
+  const liquidEtherProps = useMemo(
+    () => ({
+      colors: ["#2563eb", "#1d4ed8", "#0b1220"],
+      mouseForce: 30,
+      cursorSize: 140,
+      isViscous: true,
+      viscous: 100,
+      iterationsViscous: 32,
+      iterationsPoisson: 32,
+      resolution: 0.4,
+      isBounce: true,
+      autoDemo: false,
+      autoSpeed: 0.5,
+      autoIntensity: 2.2,
+      takeoverDuration: 0.1,
+      autoResumeDelay: 3000,
+      autoRampDuration: 0.8,
+    }),
+    [],
+  );
+
+  const activeFeature = featureTabs.find((t) => t.id === activeTab)!;
 
   return (
-    <div className="min-h-screen bg-black relative">
-      {/* Liquid Background - Behind Content */}
-      <div className="absolute inset-0 opacity-70 z-10">
-        <LiquidEther {...liquidEtherProps} />
-      </div>
-
-      {/* Content - Above Liquid
-        FIX: Added 'pointer-events-none' to let mouse events pass through to the canvas
-      */}
-      <div ref={heroRef} className="relative z-20 pointer-events-none">
-        {/* Header/Nav - Sticky and Blurred for a sleek look */}
-        <header className="p-4 md:p-6 sticky top-0 bg-black/10 backdrop-blur-md border-b border-gray-800/50 z-30">
-          <div className="max-w-7xl mx-auto flex justify-between items-center">
-            <h1 className="nav-item text-xl font-bold text-white tracking-widest">
-              DATAHYGIENE
-            </h1>
+    <div className="min-h-screen bg-background text-foreground scroll-smooth">
+      {/* ── NAV ─────────────────────────────────────────────── */}
+      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b border-border">
+        <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 h-16">
+          <span className="text-lg font-bold tracking-widest text-foreground">
+            DATAFORGE
+          </span>
+          <nav className="hidden md:flex items-center gap-8 text-sm text-muted-foreground">
+            <a
+              href="#features"
+              className="hover:text-foreground transition-colors"
+            >
+              Features
+            </a>
+            <a
+              href="#how-it-works"
+              className="hover:text-foreground transition-colors"
+            >
+              How It Works
+            </a>
+            <a
+              href="#testimonials"
+              className="hover:text-foreground transition-colors"
+            >
+              Testimonials
+            </a>
+          </nav>
+          <div className="flex items-center gap-2">
+            <ThemeToggle className="text-muted-foreground hover:text-foreground" />
             <Button
+              variant="ghost"
               onClick={handleSignIn}
-              // FIX: Added 'pointer-events-auto' to make this button clickable
-              className="nav-item bg-purple-600 hover:bg-purple-700 text-white px-5 py-2 rounded-full text-sm font-medium transition-all duration-300 pointer-events-auto"
+              className="text-sm font-medium hidden sm:inline-flex"
+            >
+              Sign In
+            </Button>
+            <Button
+              onClick={handleGetStarted}
+              className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg px-4 text-sm font-medium"
+            >
+              Get Started
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      {/* ── HERO ────────────────────────────────────────────── */}
+      <section ref={heroRef} className="relative overflow-hidden bg-[#0b1220]">
+        {/* LiquidEther — hero only, no pointer-events leak */}
+        <div
+          className="absolute inset-0 opacity-50 pointer-events-none"
+          aria-hidden="true"
+        >
+          <LiquidEther {...liquidEtherProps} />
+        </div>
+
+        <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 pt-24 pb-32 md:pt-36 md:pb-44 text-center">
+          <Badge
+            variant="secondary"
+            className="hero-title mb-6 bg-blue-500/10 text-blue-400 border-blue-500/20"
+          >
+            Now in Public Beta — GenAI Data Prep
+          </Badge>
+
+          <h1 className="hero-title text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight leading-[1.1]">
+            <span className="bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
+              Train Better AI.
+            </span>
+            <br />
+            <span className="bg-gradient-to-r from-[#60a5fa] via-[#2563eb] to-[#60a5fa] bg-clip-text text-transparent">
+              Start With Clean Data.
+            </span>
+          </h1>
+
+          <p className="hero-sub mt-6 text-lg md:text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed">
+            DATAFORGE is the data prep platform built for AI teams — profile
+            training corpora, validate LLM outputs, detect anomalies, and ship
+            cleaner models faster.
+          </p>
+
+          <div className="hero-cta mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Button
+              onClick={handleGetStarted}
+              size="lg"
+              className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-xl px-8 py-6 text-base font-semibold shadow-lg shadow-blue-500/25 transition-all hover:shadow-blue-500/40 group"
+            >
+              Get Started Free
+              <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
+            </Button>
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={scrollToFeatures}
+              className="border-white/15 text-white hover:bg-white/5 rounded-xl px-8 py-6 text-base font-semibold group bg-transparent"
+            >
+              <Play className="mr-2 h-4 w-4" />
+              See How It Works
+            </Button>
+          </div>
+
+          {/* Product mockup placeholder */}
+          <div className="mt-16 mx-auto max-w-4xl aspect-video rounded-2xl border border-white/10 bg-gradient-to-br from-[#111827] via-[#0f172a] to-[#111827] shadow-2xl flex items-center justify-center">
+            <span className="text-slate-600 text-sm">Dashboard Preview</span>
+          </div>
+        </div>
+      </section>
+
+      {/* ── STATS BAR ──────────────────────────────────────── */}
+      <section className="border-y border-border bg-muted py-10 px-4 sm:px-6">
+        <div className="max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-8">
+          {stats.map((s) => (
+            <div key={s.label} className="text-center">
+              <p className="text-3xl md:text-4xl font-extrabold text-primary">
+                {s.value}
+              </p>
+              <p className="text-sm text-muted-foreground mt-1">{s.label}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── FEATURE SHOWCASE (Tabbed) ──────────────────────── */}
+      <section
+        id="features"
+        className="py-24 md:py-32 px-4 sm:px-6 bg-background"
+      >
+        <div className="max-w-6xl mx-auto">
+          <h2 className="text-3xl md:text-4xl font-bold text-center mb-4 text-foreground">
+            Everything You Need for AI Data Prep
+          </h2>
+          <p className="text-muted-foreground text-center max-w-2xl mx-auto mb-14">
+            From corpus profiling to team governance, one platform replaces your
+            patchwork of scripts and manual checks.
+          </p>
+
+          {/* Tab bar */}
+          <div
+            className="flex flex-wrap justify-center gap-2 mb-12"
+            role="tablist"
+          >
+            {featureTabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = tab.id === activeTab;
+              return (
+                <button
+                  key={tab.id}
+                  role="tab"
+                  aria-selected={isActive}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium transition-all ${
+                    isActive
+                      ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
+                      : "bg-secondary text-muted-foreground hover:bg-accent hover:text-foreground"
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                  <span className="hidden sm:inline">{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Tab content */}
+          <div
+            className="grid md:grid-cols-2 gap-10 items-center"
+            role="tabpanel"
+            aria-label={activeFeature.label}
+          >
+            <div className="order-2 md:order-1">
+              <h3 className="text-2xl md:text-3xl font-bold mb-4 text-foreground">
+                {activeFeature.headline}
+              </h3>
+              <p className="text-muted-foreground leading-relaxed mb-6">
+                {activeFeature.description}
+              </p>
+              <ul className="space-y-3">
+                {activeFeature.benefits.map((b) => (
+                  <li
+                    key={b}
+                    className="flex items-start gap-3 text-foreground"
+                  >
+                    <Check className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                    {b}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="order-1 md:order-2 aspect-[4/3] rounded-2xl border border-border bg-card flex items-center justify-center">
+              <span className="text-muted-foreground text-sm">
+                Feature Preview — {activeFeature.label}
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── HOW IT WORKS ───────────────────────────────────── */}
+      <section
+        id="how-it-works"
+        className="py-24 md:py-32 px-4 sm:px-6 bg-muted"
+      >
+        <div className="max-w-5xl mx-auto text-center">
+          <h2 className="text-3xl md:text-4xl font-bold mb-4 text-foreground">
+            How It Works
+          </h2>
+          <p className="text-muted-foreground max-w-xl mx-auto mb-16">
+            Four simple steps from raw data to validated, training-ready
+            datasets.
+          </p>
+
+          <div className="grid md:grid-cols-4 gap-8 md:gap-4 relative">
+            <div
+              className="hidden md:block absolute top-12 left-[calc(25%+0.5rem)] right-[calc(25%+0.5rem)] h-px bg-gradient-to-r from-primary/30 via-primary/60 to-primary/30"
+              aria-hidden="true"
+            />
+            {steps.map((step) => {
+              const Icon = step.icon;
+              return (
+                <div
+                  key={step.number}
+                  className="flex flex-col items-center text-center"
+                >
+                  <div className="relative z-10 w-24 h-24 rounded-2xl bg-gradient-to-br from-[#2563eb] to-[#1d4ed8] flex items-center justify-center shadow-lg shadow-primary/20 mb-6">
+                    <Icon className="h-6 w-6 text-white" />
+                  </div>
+                  <span className="text-xs font-bold text-primary tracking-widest mb-2">
+                    STEP {step.number}
+                  </span>
+                  <h3 className="text-xl font-bold mb-2 text-foreground">
+                    {step.title}
+                  </h3>
+                  <p className="text-muted-foreground text-sm leading-relaxed max-w-xs">
+                    {step.description}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* ── TESTIMONIALS ───────────────────────────────────── */}
+      <section
+        id="testimonials"
+        className="py-24 md:py-32 px-4 sm:px-6 bg-background"
+      >
+        <div className="max-w-6xl mx-auto">
+          <h2 className="text-3xl md:text-4xl font-bold text-center mb-14 text-foreground">
+            Trusted by AI Teams
+          </h2>
+          <div className="grid md:grid-cols-3 gap-6">
+            {testimonials.map((t) => (
+              <div
+                key={t.author}
+                className="rounded-xl border border-border bg-card p-6"
+              >
+                <div className="flex gap-1 mb-4">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <Star
+                      key={i}
+                      className="h-4 w-4 fill-primary text-primary"
+                    />
+                  ))}
+                </div>
+                <p className="text-muted-foreground text-sm leading-relaxed mb-6">
+                  &ldquo;{t.quote}&rdquo;
+                </p>
+                <div>
+                  <p className="font-semibold text-sm text-foreground">
+                    {t.author}
+                  </p>
+                  <p className="text-muted-foreground text-xs">{t.role}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-16 flex flex-wrap items-center justify-center gap-10">
+            {[
+              "Synthesis AI",
+              "NeuralWorks",
+              "Apex Labs",
+              "TechVentures",
+              "CloudScale",
+            ].map((name) => (
+              <span
+                key={name}
+                className="text-muted-foreground/60 text-sm font-medium tracking-wide"
+              >
+                {name}
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── CTA BANNER ─────────────────────────────────────── */}
+      <section className="py-20 px-4 sm:px-6 bg-[#0b1220]">
+        <div className="max-w-3xl mx-auto text-center">
+          <h2 className="text-3xl md:text-4xl font-bold mb-4 text-white">
+            Ready to ship cleaner models?
+          </h2>
+          <p className="text-slate-400 mb-8 text-lg">
+            Start validating your training data in minutes. No credit card
+            required.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Button
+              onClick={handleGetStarted}
+              size="lg"
+              className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-xl px-8 py-6 text-base font-semibold shadow-lg shadow-blue-500/30 group"
+            >
+              Get Started Free
+              <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
+            </Button>
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={handleSignIn}
+              className="border-white/15 text-white hover:bg-white/5 rounded-xl px-8 py-6 text-base font-semibold bg-transparent"
             >
               Sign In
             </Button>
           </div>
-        </header>
+        </div>
+      </section>
 
-        {/* Hero Section - The Main Event */}
-        <section className="min-h-[calc(100vh-64px)] flex items-center justify-center px-4 pt-16 pb-24 md:pt-24 md:pb-32">
-          <div className="max-w-7xl mx-auto text-center">
-            <h1 className="hero-title text-7xl sm:text-8xl lg:text-[10rem] font-extrabold bg-clip-text text-transparent leading-none">
-              <span className="bg-gradient-to-r from-gray-50 via-white to-gray-200 bg-clip-text">
-                Data Hygiene
-              </span>
-              <br />
-              <span className="bg-gradient-to-r from-purple-400 via-cyan-400 to-blue-500 bg-clip-text">
-                Perfected
-              </span>
-            </h1>
-
-            <p className="hero-subtitle text-xl md:text-2xl text-gray-400 mt-8 max-w-4xl mx-auto leading-relaxed drop-shadow-lg">
-              Stop drowning in messy data. Transform inconsistency into
-              pristine, actionable insight with our comprehensive, AI-powered
-              quality platform.
+      {/* ── FOOTER ─────────────────────────────────────────── */}
+      <footer className="border-t border-border bg-muted py-16 px-4 sm:px-6">
+        <div className="max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-5 gap-10">
+          {/* Brand */}
+          <div className="col-span-2 md:col-span-1">
+            <span className="text-lg font-bold tracking-widest text-foreground">
+              DATAFORGE
+            </span>
+            <p className="text-muted-foreground text-sm mt-3 leading-relaxed">
+              The data prep platform for AI teams that ship reliable models.
             </p>
-
-            <div className="hero-button mt-16 flex justify-center space-x-4">
-              <Button
-                onClick={handleStartCleaning}
-                // FIX: Added 'pointer-events-auto' to make this button clickable
-                className="bg-purple-600 hover:bg-purple-700 text-white px-10 py-6 rounded-xl text-lg font-bold shadow-2xl shadow-purple-500/50 transform hover:scale-[1.02] transition-all duration-300 group pointer-events-auto"
-              >
-                Start Cleaning Now
-                <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
-              </Button>
-              {/* <Button
-                variant="outline"
-                onClick={() => router.push("/demo")}
-                // FIX: Added 'pointer-events-auto' to make this button clickable
-                className="bg-white/10 border-white/20 hover:bg-white/20 text-white px-10 py-6 rounded-xl text-lg font-semibold shadow-lg backdrop-blur-sm transform hover:scale-[1.02] transition-all duration-300 group pointer-events-auto"
-              >
-                View Live Demo
-              </Button> */}
-            </div>
           </div>
-        </section>
 
-        {/* Stats Callout Section - For instant credibility
-        <section className="py-12 px-4 bg-black/20 border-t border-b border-gray-800/50">
-          <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
-            {statCards.map((card, index) => (
-              <div key={index} className="space-y-2">
-                <p className="text-5xl font-extrabold bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent">
-                  {card.number}
-                </p>
-                <p className="text-lg text-gray-400 uppercase tracking-wider">
-                  {card.label}
-                </p>
-              </div>
-            ))}
+          {/* Product */}
+          <div>
+            <h4 className="text-sm font-semibold mb-4 text-foreground">
+              Product
+            </h4>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              <li>
+                <a
+                  href="#features"
+                  className="hover:text-foreground transition-colors"
+                >
+                  Features
+                </a>
+              </li>
+              <li>
+                <a
+                  href="#how-it-works"
+                  className="hover:text-foreground transition-colors"
+                >
+                  How It Works
+                </a>
+              </li>
+              <li>
+                <a href="#" className="hover:text-foreground transition-colors">
+                  Documentation
+                </a>
+              </li>
+              <li>
+                <a href="#" className="hover:text-foreground transition-colors">
+                  API Reference
+                </a>
+              </li>
+            </ul>
           </div>
-        </section> */}
 
-        {/* Features Section - Sleeker Cards, More Features */}
-        <section ref={featuresRef} className="py-24 px-4">
-          <div className="max-w-7xl mx-auto">
-            <h2 className="text-4xl md:text-5xl font-extrabold text-center bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent mb-4">
-              The Platform Your Data Deserves
-            </h2>
-            <p className="text-xl text-center text-gray-400 mb-16 max-w-3xl mx-auto">
-              Built for scale, speed, and security. Everything you need to
-              achieve data perfection.
-            </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {features.map((feature, index) => (
-                <FeatureCard key={index} feature={feature} index={index} />
-              ))}
-            </div>
+          {/* Company */}
+          <div>
+            <h4 className="text-sm font-semibold mb-4 text-foreground">
+              Company
+            </h4>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              <li>
+                <a href="#" className="hover:text-foreground transition-colors">
+                  About
+                </a>
+              </li>
+              <li>
+                <a href="#" className="hover:text-foreground transition-colors">
+                  Blog
+                </a>
+              </li>
+              <li>
+                <a href="#" className="hover:text-foreground transition-colors">
+                  Careers
+                </a>
+              </li>
+              <li>
+                <a href="#" className="hover:text-foreground transition-colors">
+                  Contact
+                </a>
+              </li>
+            </ul>
           </div>
-        </section>
 
-        {/* Footer Placeholder (because even cool tech needs a footer) */}
-        <footer className="py-8 border-t border-gray-900 text-center text-gray-600 text-sm">
-          &copy; {new Date().getFullYear()} DataHygiene. All rights reserved.
-        </footer>
-      </div>
+          {/* Legal */}
+          <div>
+            <h4 className="text-sm font-semibold mb-4 text-foreground">
+              Legal
+            </h4>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              <li>
+                <a href="#" className="hover:text-foreground transition-colors">
+                  Privacy Policy
+                </a>
+              </li>
+              <li>
+                <a href="#" className="hover:text-foreground transition-colors">
+                  Terms of Service
+                </a>
+              </li>
+              <li>
+                <a href="#" className="hover:text-foreground transition-colors">
+                  Security
+                </a>
+              </li>
+            </ul>
+          </div>
+        </div>
 
-      {/* Floating animation elements (kept from original) */}
-      <div className="absolute top-20 left-10 w-4 h-4 bg-purple-400 rounded-full animate-ping opacity-75" />
-      <div className="absolute top-40 right-20 w-6 h-6 bg-purple-500 rounded-full animate-pulse opacity-50" />
-      <div className="absolute bottom-40 left-20 w-3 h-3 bg-purple-300 rounded-full animate-bounce opacity-60" />
+        {/* Bottom bar */}
+        <div className="max-w-6xl mx-auto mt-12 pt-8 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4">
+          <p className="text-muted-foreground text-sm">
+            &copy; {new Date().getFullYear()} DATAFORGE. All rights reserved.
+          </p>
+          <div className="flex items-center gap-4">
+            <a
+              href="#"
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="Twitter"
+            >
+              <Twitter className="h-5 w-5" />
+            </a>
+            <a
+              href="#"
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="GitHub"
+            >
+              <Github className="h-5 w-5" />
+            </a>
+            <a
+              href="#"
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="LinkedIn"
+            >
+              <Linkedin className="h-5 w-5" />
+            </a>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

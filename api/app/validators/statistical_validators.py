@@ -9,8 +9,7 @@ from scipy import stats
 from sklearn.ensemble import IsolationForest
 from sklearn.svm import OneClassSVM
 from sklearn.preprocessing import StandardScaler
-from typing import List, Dict, Any, Optional, Tuple
-import json
+from typing import List, Dict, Any, Optional
 import warnings
 
 from .base_validator import BaseValidator
@@ -35,7 +34,7 @@ class StatisticalOutlierValidator(BaseValidator):
     def validate(self) -> List[Dict[str, Any]]:
         """Detect outliers in specified columns"""
         issues = []
-        target_columns = self._get_target_columns()
+        target_columns = self.target_columns
 
         for column in target_columns:
             if column not in self.df.columns:
@@ -133,7 +132,7 @@ class DistributionCheckValidator(BaseValidator):
     def validate(self) -> List[Dict[str, Any]]:
         """Check distribution properties of specified columns"""
         issues = []
-        target_columns = self._get_target_columns()
+        target_columns = self.target_columns
 
         for column in target_columns:
             if column not in self.df.columns:
@@ -246,7 +245,7 @@ class CorrelationValidator(BaseValidator):
     def validate(self) -> List[Dict[str, Any]]:
         """Check for high correlations between specified columns"""
         issues = []
-        target_columns = self._get_target_columns()
+        target_columns = self.target_columns
 
         # Filter to only numeric columns that exist
         numeric_columns = []

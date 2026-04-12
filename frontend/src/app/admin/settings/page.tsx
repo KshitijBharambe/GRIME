@@ -28,12 +28,12 @@ import {
 } from 'lucide-react'
 
 interface SystemSetting {
-  key: string
-  value: string | boolean | number
-  type: 'text' | 'number' | 'boolean' | 'select'
-  options?: string[]
-  description: string
-  category: string
+  readonly key: string
+  readonly value: string | boolean | number
+  readonly type: 'text' | 'number' | 'boolean' | 'select'
+  readonly options?: readonly string[]
+  readonly description: string
+  readonly category: string
 }
 
 // Mock system settings - in a real app, these would come from an API
@@ -141,8 +141,8 @@ const systemSettings: SystemSetting[] = [
 ]
 
 interface SettingCardProps {
-  setting: SystemSetting
-  value: string | boolean | number
+  readonly setting: SystemSetting
+  readonly value: string | boolean | number
   onChange: (key: string, value: string | boolean | number) => void
 }
 

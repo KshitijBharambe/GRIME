@@ -5,7 +5,7 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { useState } from 'react'
 
 interface QueryProviderProps {
-  children: React.ReactNode
+  readonly children: React.ReactNode
 }
 
 export function QueryProvider({ children }: QueryProviderProps) {

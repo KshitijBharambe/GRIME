@@ -4,7 +4,7 @@ import { SessionProvider } from 'next-auth/react'
 import { ReactNode } from 'react'
 
 interface AuthProviderProps {
-  children: ReactNode
+  readonly children: ReactNode
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {

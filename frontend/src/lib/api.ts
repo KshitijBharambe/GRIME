@@ -32,22 +32,41 @@ import {
   OrganizationInvite,
   OrganizationUpdateData,
   SwitchOrganizationResponse,
+  Compartment,
+  CompartmentCreate,
+  CompartmentUpdate,
+  CompartmentMember,
+  CompartmentMemberCreate,
+  AccessRequest,
+  AccessRequestCreate,
+  AccessRequestApproval,
+  PasswordChangeRequest,
+  GuestLoginResponse,
+  PersonalRegisterRequest,
+  PersonalRegisterResponse,
 } from "@/types/api";
 import { getApiUrl } from "./config";
 
 class ApiClient {
   private client: AxiosInstance;
   private token: string | null = null;
+  private readonly maxRetries = 2;
 
   constructor(baseURL: string = getApiUrl()) {
     // Ensure HTTPS in production
+    const isLocalHttp =
+      baseURL.startsWith("http://localhost") ||
+      baseURL.startsWith("http://127.0.0.1");
     const secureURL =
-      baseURL.startsWith("http://") && baseURL.includes("fly.dev")
+      process.env.NODE_ENV === "production" &&
+      baseURL.startsWith("http://") &&
+      !isLocalHttp
         ? baseURL.replace("http://", "https://")
         : baseURL;
 
     this.client = axios.create({
       baseURL: secureURL,
+      timeout: 30000,
       headers: {
         "Content-Type": "application/json",
       },
@@ -62,41 +81,46 @@ class ApiClient {
 
         return config;
       },
-      (error) => Promise.reject(error)
+      (error) => Promise.reject(error),
     );
 
     // Add response interceptor for error handling
     this.client.interceptors.response.use(
       (response) => response,
-      (error) => {
+      async (error) => {
+        const config = error.config as
+          | (typeof error.config & { __retryCount?: number })
+          | undefined;
+
+        if (config) {
+          const status = error.response?.status;
+          const isNetworkError = !error.response;
+          const isRetriableStatus = typeof status === "number" && status >= 500;
+
+          config.__retryCount = config.__retryCount || 0;
+
+          if (
+            (isNetworkError || isRetriableStatus) &&
+            config.__retryCount < this.maxRetries
+          ) {
+            config.__retryCount += 1;
+            return this.client.request(config);
+          }
+        }
+
         // Don't automatically clear token on 401 - let NextAuth handle session management
         // The token will be re-synced by useAuthenticatedApi hook
         return Promise.reject(error);
-      }
+      },
     );
-
-    // Load token from localStorage on initialization (client-side only)
-    if (typeof window !== "undefined") {
-      try {
-        this.token = localStorage.getItem("auth_token");
-      } catch {
-        this.token = null;
-      }
-    }
   }
 
   setToken(token: string) {
     this.token = token;
-    if (typeof window !== "undefined") {
-      localStorage.setItem("auth_token", token);
-    }
   }
 
   clearToken() {
     this.token = null;
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("auth_token");
-    }
   }
 
   getToken() {
@@ -107,7 +131,7 @@ class ApiClient {
   async login(credentials: UserLogin): Promise<TokenResponse> {
     const response = await this.client.post<TokenResponse>(
       "/auth/login",
-      credentials
+      credentials,
     );
     this.setToken(response.data.access_token);
     return response.data;
@@ -118,8 +142,31 @@ class ApiClient {
     return response.data;
   }
 
-  async registerOrganization(orgData: OrganizationCreate): Promise<TokenResponse> {
-    const response = await this.client.post<TokenResponse>("/auth/register-organization", orgData);
+  async registerOrganization(
+    orgData: OrganizationCreate,
+  ): Promise<TokenResponse> {
+    const response = await this.client.post<TokenResponse>(
+      "/auth/register-organization",
+      orgData,
+    );
+    return response.data;
+  }
+
+  async guestLogin(): Promise<GuestLoginResponse> {
+    const response =
+      await this.client.post<GuestLoginResponse>("/auth/guest-login");
+    this.setToken(response.data.access_token);
+    return response.data;
+  }
+
+  async registerPersonal(
+    data: PersonalRegisterRequest,
+  ): Promise<PersonalRegisterResponse> {
+    const response = await this.client.post<PersonalRegisterResponse>(
+      "/auth/register-personal",
+      data,
+    );
+    this.setToken(response.data.access_token);
     return response.data;
   }
 
@@ -128,50 +175,102 @@ class ApiClient {
     password: string;
     organization_id: string;
   }): Promise<TokenResponse> {
-    const response = await this.client.post<TokenResponse>("/auth/login", credentials);
+    const response = await this.client.post<TokenResponse>(
+      "/auth/login",
+      credentials,
+    );
     this.setToken(response.data.access_token);
     return response.data;
   }
 
   async getUserOrganizations(): Promise<Organization[]> {
-    const response = await this.client.get<Organization[]>("/auth/organizations");
+    if (globalThis.window !== undefined) {
+      const response = await fetch("/api/auth/organizations", {
+        method: "GET",
+        headers: this.token
+          ? {
+              Authorization: `Bearer ${this.token}`,
+            }
+          : {},
+      });
+
+      if (!response.ok) {
+        let detail = "Failed to fetch organizations";
+        try {
+          const data = (await response.json()) as { detail?: string };
+          if (data?.detail) {
+            detail = data.detail;
+          }
+        } catch {
+          // Keep generic message if response body is not JSON.
+        }
+
+        throw new Error(detail);
+      }
+
+      return (await response.json()) as Organization[];
+    }
+
+    const response = await this.client.get<Organization[]>(
+      "/auth/organizations",
+    );
     return response.data;
   }
 
-  async switchOrganization(organizationId: string): Promise<SwitchOrganizationResponse> {
-    const response = await this.client.post<SwitchOrganizationResponse>("/auth/switch-organization", {
-      organization_id: organizationId,
-    });
+  async switchOrganization(
+    organizationId: string,
+  ): Promise<SwitchOrganizationResponse> {
+    const response = await this.client.post<SwitchOrganizationResponse>(
+      "/auth/switch-organization",
+      {
+        organization_id: organizationId,
+      },
+    );
     this.setToken(response.data.access_token);
     return response.data;
   }
 
   async getOrganizationDetails(): Promise<Organization> {
-    const response = await this.client.get<Organization>("/auth/organization/details");
+    const response = await this.client.get<Organization>(
+      "/auth/organization/details",
+    );
     return response.data;
   }
 
-  async updateOrganizationDetails(data: OrganizationUpdateData): Promise<Organization> {
-    const response = await this.client.put<Organization>("/auth/organization/details", data);
+  async updateOrganizationDetails(
+    data: OrganizationUpdateData,
+  ): Promise<Organization> {
+    const response = await this.client.put<Organization>(
+      "/auth/organization/details",
+      data,
+    );
     return response.data;
   }
 
   // Team management endpoints
   async getOrganizationMembers(): Promise<OrganizationMember[]> {
-    const response = await this.client.get<OrganizationMember[]>("/auth/members");
+    const response =
+      await this.client.get<OrganizationMember[]>("/auth/members");
     return response.data;
   }
 
-  async inviteMember(email: string, role: UserRole): Promise<OrganizationInvite> {
-    const response = await this.client.post<OrganizationInvite>("/auth/invite-user", {
-      email,
-      role,
-    });
+  async inviteMember(
+    email: string,
+    role: UserRole,
+  ): Promise<OrganizationInvite> {
+    const response = await this.client.post<OrganizationInvite>(
+      "/auth/invite-user",
+      {
+        email,
+        role,
+      },
+    );
     return response.data;
   }
 
   async getInvitations(): Promise<OrganizationInvite[]> {
-    const response = await this.client.get<OrganizationInvite[]>("/auth/invites");
+    const response =
+      await this.client.get<OrganizationInvite[]>("/auth/invites");
     return response.data;
   }
 
@@ -179,10 +278,16 @@ class ApiClient {
     await this.client.delete(`/auth/invites/${inviteId}`);
   }
 
-  async updateMemberRole(memberId: string, role: UserRole): Promise<OrganizationMember> {
-    const response = await this.client.put<OrganizationMember>(`/auth/members/${memberId}/role`, {
-      role,
-    });
+  async updateMemberRole(
+    memberId: string,
+    role: UserRole,
+  ): Promise<OrganizationMember> {
+    const response = await this.client.put<OrganizationMember>(
+      `/auth/members/${memberId}/role`,
+      {
+        role,
+      },
+    );
     return response.data;
   }
 
@@ -225,11 +330,11 @@ class ApiClient {
 
   async updateDataset(
     id: string,
-    dataset: Partial<DatasetCreate>
+    dataset: Partial<DatasetCreate>,
   ): Promise<Dataset> {
     const response = await this.client.put<Dataset>(
       `/data/datasets/${id}`,
-      dataset
+      dataset,
     );
     return response.data;
   }
@@ -241,7 +346,7 @@ class ApiClient {
   async uploadFile(
     file: File,
     datasetName: string,
-    description?: string
+    description?: string,
   ): Promise<{
     message: string;
     filename: string;
@@ -270,25 +375,34 @@ class ApiClient {
 
   async getDataProfile(datasetId: string): Promise<DataProfileResponse> {
     const response = await this.client.get<DataProfileResponse>(
-      `/data/datasets/${datasetId}/profile`
+      `/data/datasets/${datasetId}/profile`,
     );
     return response.data;
   }
 
   // Dataset versions
   async getDatasetVersions(datasetId: string): Promise<DatasetVersion[]> {
-    const response = await this.client.get<DatasetVersion[]>(
-      `/datasets/${datasetId}/versions`
-    );
-    return response.data;
+    try {
+      const response = await this.client.get<DatasetVersion[]>(
+        `/datasets/${datasetId}/versions`,
+      );
+      return response.data;
+    } catch (error) {
+      // Some deployments don't expose a public dataset versions listing endpoint.
+      // Returning an empty list lets callers render a graceful fallback state.
+      if (axios.isAxiosError(error) && error.response?.status === 404) {
+        return [];
+      }
+      throw error;
+    }
   }
 
   async getDatasetVersion(
     datasetId: string,
-    versionId: string
+    versionId: string,
   ): Promise<DatasetVersion> {
     const response = await this.client.get<DatasetVersion>(
-      `/datasets/${datasetId}/versions/${versionId}`
+      `/datasets/${datasetId}/versions/${versionId}`,
     );
     return response.data;
   }
@@ -296,7 +410,7 @@ class ApiClient {
   // Dataset columns
   async getDatasetColumns(datasetId: string): Promise<DatasetColumn[]> {
     const response = await this.client.get<DatasetColumn[]>(
-      `/data/datasets/${datasetId}/columns`
+      `/data/datasets/${datasetId}/columns`,
     );
     return response.data;
   }
@@ -340,7 +454,7 @@ class ApiClient {
 
   async testRule(
     ruleId: string,
-    testData: RuleTestRequest
+    testData: RuleTestRequest,
   ): Promise<{ success: boolean; message: string; results?: unknown }> {
     const response = await this.client.post(`/rules/${ruleId}/test`, testData);
     return response.data;
@@ -369,13 +483,13 @@ class ApiClient {
   // Execution endpoints
   async getExecutions(
     page: number = 1,
-    size: number = 20
+    size: number = 20,
   ): Promise<PaginatedResponse<Execution>> {
     const response = await this.client.get<PaginatedResponse<Execution>>(
       "/executions",
       {
         params: { page, size },
-      }
+      },
     );
     return response.data;
   }
@@ -388,23 +502,23 @@ class ApiClient {
   async createExecution(execution: ExecutionCreate): Promise<Execution> {
     const response = await this.client.post<Execution>(
       "/executions",
-      execution
+      execution,
     );
     return response.data;
   }
 
   async getExecutionSummary(id: string): Promise<ExecutionSummary> {
     const response = await this.client.get<ExecutionSummary>(
-      `/executions/${id}/summary`
+      `/executions/${id}/summary`,
     );
     return response.data;
   }
 
   async getExecutionQualityMetrics(
-    executionId: string
+    executionId: string,
   ): Promise<QualityMetrics> {
     const response = await this.client.get<QualityMetrics>(
-      `/executions/${executionId}/quality-metrics`
+      `/executions/${executionId}/quality-metrics`,
     );
     return response.data;
   }
@@ -413,7 +527,7 @@ class ApiClient {
   async getIssues(
     executionId?: string,
     page: number = 1,
-    size: number = 1000
+    size: number = 1000,
   ): Promise<PaginatedResponse<Issue>> {
     const params: Record<string, unknown> = {
       limit: size,
@@ -458,13 +572,13 @@ class ApiClient {
   // Export endpoints
   async getExports(
     page: number = 1,
-    size: number = 20
+    size: number = 20,
   ): Promise<PaginatedResponse<Export>> {
     const response = await this.client.get<PaginatedResponse<Export>>(
       "/exports",
       {
         params: { page, size },
-      }
+      },
     );
     return response.data;
   }
@@ -484,20 +598,20 @@ class ApiClient {
   // Report endpoints
   async getDataQualitySummary(): Promise<DataQualitySummary> {
     const response = await this.client.get<DataQualitySummary>(
-      "/reports/data-quality-summary"
+      "/reports/data-quality-summary",
     );
     return response.data;
   }
 
   async getExecutionReports(
     page: number = 1,
-    size: number = 20
+    size: number = 20,
   ): Promise<PaginatedResponse<ExecutionSummary>> {
     const response = await this.client.get<PaginatedResponse<ExecutionSummary>>(
       "/reports/executions",
       {
         params: { page, size },
-      }
+      },
     );
     return response.data;
   }
@@ -505,7 +619,7 @@ class ApiClient {
   // Dashboard endpoints
   async getDashboardOverview(): Promise<DashboardOverview> {
     const response = await this.client.get<DashboardOverview>(
-      "/reports/dashboard/overview"
+      "/reports/dashboard/overview",
     );
     return response.data;
   }
@@ -513,14 +627,14 @@ class ApiClient {
   // Quality Reports endpoints
   async getQualitySummary(datasetId: string): Promise<unknown> {
     const response = await this.client.get(
-      `/reports/datasets/${datasetId}/quality-summary`
+      `/reports/datasets/${datasetId}/quality-summary`,
     );
     return response.data;
   }
 
   async generateQualityReport(
     datasetId: string,
-    includeCharts: boolean = false
+    includeCharts: boolean = false,
   ): Promise<{
     export_id: string;
     dataset_id: string;
@@ -535,7 +649,7 @@ class ApiClient {
       null,
       {
         params: { include_charts: includeCharts },
-      }
+      },
     );
     return response.data;
   }
@@ -545,7 +659,7 @@ class ApiClient {
       "/reports/analytics/quality-trends",
       {
         params: { days },
-      }
+      },
     );
     return response.data;
   }
@@ -577,7 +691,7 @@ class ApiClient {
     format: string,
     includeMetadata: boolean = true,
     includeIssues: boolean = false,
-    executionId?: string
+    executionId?: string,
   ): Promise<{
     export_id: string;
     dataset_id: string;
@@ -599,7 +713,7 @@ class ApiClient {
           include_issues: includeIssues,
           execution_id: executionId,
         },
-      }
+      },
     );
     return response.data;
   }
@@ -611,7 +725,7 @@ class ApiClient {
     exports: unknown[];
   }> {
     const response = await this.client.get(
-      `/reports/datasets/${datasetId}/export-history`
+      `/reports/datasets/${datasetId}/export-history`,
     );
     return response.data;
   }
@@ -621,7 +735,7 @@ class ApiClient {
       `/reports/exports/${exportId}/download`,
       {
         responseType: "blob",
-      }
+      },
     );
     return response.data;
   }
@@ -638,11 +752,11 @@ class ApiClient {
 
   async updateUserRole(
     userId: string,
-    role: UserRole
+    role: UserRole,
   ): Promise<{ message: string; user: User }> {
     const response = await this.client.put<{ message: string; user: User }>(
       `/auth/users/${userId}/role`,
-      { role }
+      { role },
     );
     return response.data;
   }
@@ -656,10 +770,127 @@ class ApiClient {
     return response.data;
   }
 
+  // Compartment endpoints
+  async getCompartments(): Promise<Compartment[]> {
+    const response = await this.client.get<Compartment[]>("/compartments");
+    return response.data;
+  }
+
+  async getCompartment(id: string): Promise<Compartment> {
+    const response = await this.client.get<Compartment>(`/compartments/${id}`);
+    return response.data;
+  }
+
+  async createCompartment(data: CompartmentCreate): Promise<Compartment> {
+    const response = await this.client.post<Compartment>("/compartments", data);
+    return response.data;
+  }
+
+  async updateCompartment(
+    id: string,
+    data: CompartmentUpdate,
+  ): Promise<Compartment> {
+    const response = await this.client.put<Compartment>(
+      `/compartments/${id}`,
+      data,
+    );
+    return response.data;
+  }
+
+  async deleteCompartment(id: string): Promise<void> {
+    await this.client.delete(`/compartments/${id}`);
+  }
+
+  async getCompartmentMembers(
+    compartmentId: string,
+  ): Promise<CompartmentMember[]> {
+    const response = await this.client.get<CompartmentMember[]>(
+      `/compartments/${compartmentId}/members`,
+    );
+    return response.data;
+  }
+
+  async addCompartmentMember(
+    compartmentId: string,
+    data: CompartmentMemberCreate,
+  ): Promise<CompartmentMember> {
+    const response = await this.client.post<CompartmentMember>(
+      `/compartments/${compartmentId}/members`,
+      data,
+    );
+    return response.data;
+  }
+
+  async removeCompartmentMember(
+    compartmentId: string,
+    memberId: string,
+  ): Promise<void> {
+    await this.client.delete(
+      `/compartments/${compartmentId}/members/${memberId}`,
+    );
+  }
+
+  // Access Request endpoints
+  async getMyAccessRequests(): Promise<AccessRequest[]> {
+    const response = await this.client.get<AccessRequest[]>("/access-requests");
+    return response.data;
+  }
+
+  async getPendingApprovals(): Promise<AccessRequest[]> {
+    const response = await this.client.get<AccessRequest[]>(
+      "/access-requests/pending",
+    );
+    return response.data;
+  }
+
+  async createAccessRequest(data: AccessRequestCreate): Promise<AccessRequest> {
+    const response = await this.client.post<AccessRequest>(
+      "/access-requests",
+      data,
+    );
+    return response.data;
+  }
+
+  async requestPasswordChange(
+    data: PasswordChangeRequest,
+  ): Promise<AccessRequest> {
+    const response = await this.client.post<AccessRequest>(
+      "/access-requests/password-change",
+      data,
+    );
+    return response.data;
+  }
+
+  async approveAccessRequest(
+    id: string,
+    data: AccessRequestApproval,
+  ): Promise<AccessRequest> {
+    const response = await this.client.put<AccessRequest>(
+      `/access-requests/${id}/approve`,
+      data,
+    );
+    return response.data;
+  }
+
+  async rejectAccessRequest(
+    id: string,
+    data: AccessRequestApproval,
+  ): Promise<AccessRequest> {
+    const response = await this.client.put<AccessRequest>(
+      `/access-requests/${id}/reject`,
+      data,
+    );
+    return response.data;
+  }
+
+  async cancelAccessRequest(id: string): Promise<void> {
+    await this.client.delete(`/access-requests/${id}`);
+  }
+
   // Generic HTTP methods for direct API access
   async get<T = unknown>(
     url: string,
-    config?: Record<string, unknown>
+    config?: Record<string, unknown>,
   ): Promise<AxiosResponse<T>> {
     return this.client.get<T>(url, config);
   }
@@ -667,7 +898,7 @@ class ApiClient {
   async post<T = unknown>(
     url: string,
     data?: unknown,
-    config?: Record<string, unknown>
+    config?: Record<string, unknown>,
   ): Promise<AxiosResponse<T>> {
     return this.client.post<T>(url, data, config);
   }
@@ -675,7 +906,7 @@ class ApiClient {
   async put<T = unknown>(
     url: string,
     data?: unknown,
-    config?: Record<string, unknown>
+    config?: Record<string, unknown>,
   ): Promise<AxiosResponse<T>> {
     return this.client.put<T>(url, data, config);
   }
@@ -683,14 +914,14 @@ class ApiClient {
   async patch<T = unknown>(
     url: string,
     data?: unknown,
-    config?: Record<string, unknown>
+    config?: Record<string, unknown>,
   ): Promise<AxiosResponse<T>> {
     return this.client.patch<T>(url, data, config);
   }
 
   async delete<T = unknown>(
     url: string,
-    config?: Record<string, unknown>
+    config?: Record<string, unknown>,
   ): Promise<AxiosResponse<T>> {
     return this.client.delete<T>(url, config);
   }

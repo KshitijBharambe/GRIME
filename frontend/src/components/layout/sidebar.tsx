@@ -26,38 +26,60 @@ import {
   Lightbulb,
   Bug,
   Zap,
+  FolderTree,
+  UserPlus,
+  Cable,
+  Layers,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { useSession } from "next-auth/react";
 import { useDashboardOverview } from "@/lib/hooks/useDashboard";
+import { usePendingRequestsCount } from "@/lib/hooks/usePendingRequests";
 import { DashboardOverview } from "@/types/api";
 
 interface SidebarProps {
-  isOpen: boolean;
-  onClose: () => void;
+  readonly isOpen: boolean;
+  readonly onClose: () => void;
 }
 
 interface NavItem {
-  title: string;
-  href?: string;
-  icon: React.ComponentType<{ className?: string }>;
-  badge?: string | number;
-  children?: NavItem[];
-  roles?: string[];
+  readonly section?: string;
+  readonly title: string;
+  readonly href?: string;
+  readonly icon: React.ComponentType<{ className?: string }>;
+  readonly badge?: string | number;
+  readonly children?: readonly NavItem[];
+  readonly roles?: readonly string[];
+  readonly guestRestricted?: boolean;
+}
+
+// Helper function to check if a menu item has an active child or grandchild
+function hasActiveChild(item: NavItem, pathname: string): boolean {
+  if (!item.children) return false;
+
+  return item.children.some((child) => {
+    if (child.href === pathname) return true;
+    if (child.children) {
+      return child.children.some((grandchild) => grandchild.href === pathname);
+    }
+    return false;
+  });
 }
 
 function getNavigationItems(
-  dashboardData: DashboardOverview | undefined
+  dashboardData: DashboardOverview | undefined,
+  pendingRequestsCount: number = 0,
 ): NavItem[] {
   return [
     {
+      section: "Workspace",
       title: "Dashboard",
       href: "/dashboard",
       icon: Home,
     },
     {
-      title: "Data Management",
+      title: "Data",
       icon: Database,
       children: [
         {
@@ -76,10 +98,20 @@ function getNavigationItems(
           href: "/data/profile",
           icon: BarChart3,
         },
+        {
+          title: "Data Sources",
+          href: "/connectors",
+          icon: Database,
+        },
+        {
+          title: "Webhooks",
+          href: "/connectors/webhooks",
+          icon: Zap,
+        },
       ],
     },
     {
-      title: "Quality Rules",
+      title: "Rules",
       icon: Shield,
       children: [
         {
@@ -92,10 +124,15 @@ function getNavigationItems(
           href: "/rules/create",
           icon: Settings,
         },
+        {
+          title: "Block Builder",
+          href: "/rules/builder",
+          icon: Layers,
+        },
       ],
     },
     {
-      title: "Execution",
+      title: "Runs",
       icon: Activity,
       children: [
         {
@@ -123,6 +160,7 @@ function getNavigationItems(
         : undefined,
     },
     {
+      section: "Insights",
       title: "Reports",
       icon: FileText,
       children: [
@@ -139,8 +177,8 @@ function getNavigationItems(
       ],
     },
     {
-      title: "Advanced Features",
-      icon: Zap,
+      title: "Platform",
+      icon: Cable,
       children: [
         {
           title: "ML Models",
@@ -160,14 +198,31 @@ function getNavigationItems(
       ],
     },
     {
+      section: "Administration",
       title: "Organization",
       icon: Users,
       roles: ["owner", "admin"],
+      guestRestricted: true,
       children: [
         {
           title: "Team Management",
           href: "/dashboard/team",
           icon: Users,
+          roles: ["owner", "admin"],
+        },
+        {
+          title: "Requests",
+          href: "/dashboard/requests",
+          icon: FileText,
+          badge:
+            pendingRequestsCount > 0
+              ? pendingRequestsCount.toString()
+              : undefined,
+        },
+        {
+          title: "Compartments",
+          href: "/dashboard/compartments",
+          icon: FolderTree,
           roles: ["owner", "admin"],
         },
         {
@@ -182,6 +237,7 @@ function getNavigationItems(
       title: "Administration",
       icon: Settings,
       roles: ["admin"],
+      guestRestricted: true,
       children: [
         {
           title: "Users",
@@ -205,12 +261,16 @@ function NavItemComponent({
   level = 0,
   isExpanded = false,
   onToggleExpanded,
-}: {
+  navigatingTo,
+  onNavigate,
+}: Readonly<{
   item: NavItem;
   level?: number;
   isExpanded?: boolean;
   onToggleExpanded?: () => void;
-}) {
+  navigatingTo?: string | null;
+  onNavigate?: (href: string) => void;
+}>) {
   const pathname = usePathname();
   const { data: session } = useSession();
 
@@ -218,12 +278,16 @@ function NavItemComponent({
   const hasActiveChild = item.children?.some(
     (child) =>
       child.href === pathname ||
-      (child.children &&
-        child.children.some((grandchild) => grandchild.href === pathname))
+      child.children?.some((grandchild) => grandchild.href === pathname),
   );
 
   // Check if user has permission to see this item - after hooks
   if (item.roles && !item.roles.includes(session?.user?.role || "")) {
+    return null;
+  }
+
+  // Hide guest-restricted items for guest users
+  if (item.guestRestricted && session?.user?.accountType === "guest") {
     return null;
   }
 
@@ -232,61 +296,105 @@ function NavItemComponent({
   const shouldBeExpanded = item.children ? isExpanded || hasActiveChild : false;
 
   const handleClick = () => {
+    if (item.href && onNavigate) {
+      onNavigate(item.href);
+    }
+
     if (item.children && onToggleExpanded) {
       onToggleExpanded();
     }
   };
 
+  const isNavigatingToItem = Boolean(item.href && navigatingTo === item.href);
+
   const itemContent = (
     <div
       className={cn(
-        "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors",
-        level > 0 && "ml-4",
-        isActive && "bg-primary text-primary-foreground",
-        !isActive && "hover:bg-muted",
-        hasActiveChild && !isActive && "bg-muted/50"
+        "group flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors duration-150",
+        level > 0 && "rounded-lg py-2 text-[0.9375rem]",
+        isActive
+          ? "border-[var(--sidebar-border)] bg-[var(--sidebar-accent)] text-[var(--sidebar-foreground)] shadow-sm"
+          : "border-transparent text-[var(--sidebar-foreground)] hover:border-[var(--sidebar-border)] hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-accent-foreground)]",
+        hasActiveChild &&
+          !isActive &&
+          "border-[var(--sidebar-border)] bg-[var(--sidebar-accent)]",
       )}
     >
-      <item.icon className="h-4 w-4" />
-      <span className="flex-1 text-sm font-medium">{item.title}</span>
-      {item.badge && (
-        <Badge variant={isActive ? "secondary" : "outline"} className="text-xs">
-          {item.badge}
-        </Badge>
-      )}
-      {item.children && (
-        <div className="ml-auto">
-          {shouldBeExpanded ? (
-            <ChevronDown className="h-4 w-4" />
-          ) : (
-            <ChevronRight className="h-4 w-4" />
-          )}
-        </div>
-      )}
+      <item.icon
+        className={cn(
+          "h-4 w-4 shrink-0",
+          isActive
+            ? "text-[var(--sidebar-primary)]"
+            : "text-[var(--muted-foreground)] group-hover:text-[var(--sidebar-foreground)]",
+        )}
+      />
+      <span className="flex-1 text-sm font-medium truncate">{item.title}</span>
+      <div className="ml-auto flex items-center gap-2">
+        {isNavigatingToItem && (
+          <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+        )}
+        {item.badge && (
+          <span
+            className={cn(
+              "rounded-full border px-1.5 py-0.5 text-[0.6rem] font-mono font-bold uppercase tracking-wider",
+              isActive
+                ? "border-[var(--sidebar-border)] bg-background text-[var(--sidebar-primary)]"
+                : "border-[var(--sidebar-border)] bg-background text-[var(--muted-foreground)]",
+            )}
+          >
+            {item.badge}
+          </span>
+        )}
+        {item.children && (
+          <div className="opacity-60">
+            {shouldBeExpanded ? (
+              <ChevronDown className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5" />
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 
   return (
-    <div>
+    <div className="space-y-1">
+      {level === 0 && item.section && (
+        <div className="px-3 pb-2 pt-3 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)] first:pt-0">
+          {item.section}
+        </div>
+      )}
       {item.href ? (
-        <Link href={item.href} onClick={handleClick}>
+        <Link
+          href={item.href}
+          onClick={handleClick}
+          aria-current={isActive ? "page" : undefined}
+        >
           {itemContent}
         </Link>
       ) : (
-        <button onClick={handleClick} className="w-full text-left">
+        <button
+          onClick={handleClick}
+          className="w-full text-left"
+          aria-expanded={shouldBeExpanded}
+          aria-label={`${item.title} menu`}
+        >
           {itemContent}
         </button>
       )}
 
       {item.children && shouldBeExpanded && (
-        <div className="mt-1 space-y-1">
-          {item.children.map((child, index) => (
+        <div className="mt-2 space-y-1 border-l border-[var(--sidebar-border)] pl-3 ml-4">
+          {item.children.map((child) => (
             <NavItemComponent
-              key={index}
+              key={child.title}
               item={child}
               level={level + 1}
               isExpanded={false}
               onToggleExpanded={undefined}
+              navigatingTo={navigatingTo}
+              onNavigate={onNavigate}
             />
           ))}
         </div>
@@ -295,12 +403,19 @@ function NavItemComponent({
   );
 }
 
-export function Sidebar({ isOpen, onClose }: SidebarProps) {
+export function Sidebar({ isOpen, onClose }: Readonly<SidebarProps>) {
   const { data: dashboardData } = useDashboardOverview();
-  const navigationItems = getNavigationItems(dashboardData);
-  const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>(
-    {}
+  const { data: session } = useSession();
+  const pendingRequestsCount = usePendingRequestsCount();
+  const navigationItems = getNavigationItems(
+    dashboardData,
+    pendingRequestsCount,
   );
+  const isGuest = session?.user?.accountType === "guest";
+  const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [navigatingTo, setNavigatingTo] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const pathname = usePathname();
 
@@ -315,28 +430,23 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
   // Auto-expand items with active children
   useEffect(() => {
+    setNavigatingTo(null);
+
     if (mounted && navigationItems) {
       setExpandedItems((prev) => {
         const newExpandedItems = { ...prev };
         let hasChanges = false;
 
-        navigationItems.forEach((item) => {
+        for (const item of navigationItems) {
           if (item.children) {
-            const hasActiveChild = item.children.some(
-              (child) =>
-                child.href === pathname ||
-                (child.children &&
-                  child.children.some(
-                    (grandchild) => grandchild.href === pathname
-                  ))
-            );
+            const isActiveItem = hasActiveChild(item, pathname);
 
-            if (hasActiveChild && !newExpandedItems[item.title]) {
+            if (isActiveItem && !newExpandedItems[item.title]) {
               newExpandedItems[item.title] = true;
               hasChanges = true;
             }
           }
-        });
+        }
 
         return hasChanges ? newExpandedItems : prev;
       });
@@ -348,7 +458,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     if (mounted) {
       localStorage.setItem(
         "sidebar-expanded-items",
-        JSON.stringify(expandedItems)
+        JSON.stringify(expandedItems),
       );
     }
   }, [expandedItems, mounted]);
@@ -364,74 +474,64 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     <>
       {/* Mobile overlay */}
       {isOpen && (
-        <div
-          className="fixed inset-0 z-20 bg-black/50 md:hidden"
+        <button
+          type="button"
+          className="fixed inset-0 z-20 bg-slate-950/30 backdrop-blur-sm md:hidden"
           onClick={onClose}
+          aria-label="Close navigation overlay"
         />
       )}
 
       {/* Sidebar */}
       <aside
         className={cn(
-          // Base: fixed sidebar that slides in/out
-          "fixed left-0 top-16 z-30 h-[calc(100vh-4rem)] w-64 bg-background border-r transition-transform duration-200 ease-in-out",
-          // State: show/hide based on isOpen prop
-          isOpen ? "translate-x-0" : "-translate-x-full"
+          "fixed left-0 top-16 z-30 h-[calc(100vh-4rem)] w-64 transition-transform duration-200 ease-in-out",
+          "bg-[var(--sidebar)] text-[var(--sidebar-foreground)] border-r border-[var(--sidebar-border)]",
+          isOpen ? "translate-x-0" : "-translate-x-full",
         )}
+        style={{ boxShadow: "var(--shadow-panel)" }}
       >
         <div className="flex h-full flex-col">
           {/* Mobile close button */}
-          <div className="flex items-center justify-between p-4 border-b md:hidden">
-            <span className="font-semibold">Navigation</span>
-            <Button variant="ghost" size="icon" onClick={onClose}>
+          <div className="flex items-center justify-between border-b border-[var(--sidebar-border)] px-4 py-4 md:hidden">
+            <span className="text-sm font-semibold">Navigation</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              aria-label="Close navigation"
+              className="text-[var(--muted-foreground)] hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-foreground)]"
+            >
               <X className="h-4 w-4" />
             </Button>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-4 py-6">
+          <div className="flex-1 overflow-y-auto px-3 py-4">
             <nav className="space-y-2">
-              {navigationItems.map((item, index) => (
+              {navigationItems.map((item) => (
                 <NavItemComponent
-                  key={index}
+                  key={item.title}
                   item={item}
                   isExpanded={expandedItems[item.title] || false}
                   onToggleExpanded={() => toggleExpanded(item.title)}
+                  navigatingTo={navigatingTo}
+                  onNavigate={setNavigatingTo}
                 />
               ))}
             </nav>
           </div>
 
-          {/* Quick stats */}
-          <div className="border-t p-4">
-            <div className="space-y-3">
-              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Quick Stats
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span>Total Datasets</span>
-                  <Badge variant="outline">
-                    {dashboardData?.overview.total_datasets || 0}
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span>Open Issues</span>
-                  <Badge variant="destructive">
-                    {dashboardData
-                      ? dashboardData.overview.total_issues -
-                        dashboardData.overview.total_fixes
-                      : 0}
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span>Total Executions</span>
-                  <Badge variant="outline">
-                    {dashboardData?.overview.total_executions || 0}
-                  </Badge>
-                </div>
-              </div>
+          {/* Guest sign-up CTA */}
+          {isGuest && (
+            <div className="border-t border-[var(--sidebar-border)] p-4">
+              <Link href="/auth/register/personal">
+                <Button className="w-full" size="sm">
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Sign Up Free
+                </Button>
+              </Link>
             </div>
-          </div>
+          )}
         </div>
       </aside>
     </>

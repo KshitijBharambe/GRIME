@@ -44,6 +44,7 @@ src/
 ## 🎨 Design System
 
 ### Colors
+
 - **Primary**: Data quality theme colors
 - **Success**: Clean data indicators
 - **Warning**: Quality issues
@@ -51,45 +52,53 @@ src/
 - **Info**: General information
 
 ### Typography
+
 - **Primary**: Inter (modern, readable)
 - **Monospace**: JetBrains Mono (code, data)
 
 ### Components
+
 All components follow consistent design patterns with proper accessibility, responsive design, and dark mode support.
 
 ## 🔧 Features
 
 ### Dashboard
+
 - Real-time quality metrics
 - Interactive charts and visualizations
 - Recent activity timeline
 - Quick action shortcuts
 
 ### Data Management
+
 - Drag-and-drop file upload
 - Dataset profiling and analysis
 - Column-level statistics
 - Data type inference
 
 ### Quality Rules
+
 - Visual rule builder
 - Multiple validation types
 - Rule testing and preview
 - Template library
 
 ### Execution Monitoring
+
 - Real-time progress tracking
 - Detailed execution logs
 - Issue identification
 - Performance metrics
 
 ### Issue Management
+
 - Severity-based categorization
 - Bulk resolution tools
 - Fix tracking and audit
 - Automated suggestions
 
 ### Reports & Analytics
+
 - Quality trend analysis
 - Custom report builder
 - Multiple export formats
@@ -98,17 +107,20 @@ All components follow consistent design patterns with proper accessibility, resp
 ## 🚀 Getting Started
 
 1. **Install dependencies**:
+
    ```bash
    npm install
    ```
 
 2. **Set up environment**:
+
    ```bash
    cp .env.example .env.local
    # Edit .env.local with your settings
    ```
 
 3. **Run development server**:
+
    ```bash
    npm run dev
    ```
@@ -121,13 +133,12 @@ All components follow consistent design patterns with proper accessibility, resp
 
 ## 🔐 Authentication
 
-The application uses NextAuth.js with credentials provider for authentication. Demo login is available with:
-- Email: demo@datahygiene.com
-- Password: demo123
+The application uses NextAuth.js with credentials provider for authentication, including personal, organization, and guest access flows.
 
 ## 📊 API Integration
 
 The frontend connects to the FastAPI backend through a comprehensive API client that handles:
+
 - Authentication tokens
 - Request/response transformation
 - Error handling and retries
@@ -142,12 +153,14 @@ The frontend connects to the FastAPI backend through a comprehensive API client 
 ## 🔧 Development
 
 ### Available Scripts
+
 - `npm run dev` - Development server with Turbopack
 - `npm run build` - Production build
 - `npm run start` - Start production server
 - `npm run lint` - ESLint checks
 
 ### Code Quality
+
 - TypeScript for type safety
 - ESLint for code quality
 - Prettier for formatting

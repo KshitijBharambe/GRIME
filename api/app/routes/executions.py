@@ -3,26 +3,40 @@ from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
 import json
 import uuid
+import logging
+from uuid import uuid4
 from datetime import datetime, timezone
 
 from app.database import get_session
 from app.models import (
-    User, Execution, ExecutionStatus, DatasetVersion,
-    Issue, ExecutionRule, Dataset
+    User,
+    Execution,
+    ExecutionStatus,
+    DatasetVersion,
+    Issue,
+    ExecutionRule,
+    Dataset,
 )
 from app.auth import (
-    get_any_authenticated_user, get_admin_user,
-    get_any_org_member_context, OrgContext
+    get_any_authenticated_user,
+    get_admin_user,
+    get_any_org_member_context,
+    OrgContext,
 )
-from app.middleware.organization import OrganizationFilter
 from app.schemas import (
-    ExecutionResponse, ExecutionCreate, IssueResponse, QualityMetricsResponse
+    ExecutionResponse,
+    ExecutionCreate,
+    IssueResponse,
+    QualityMetricsResponse,
 )
-from app.services.rule_engine import RuleEngineService
 from app.services.enhanced_rule_engine import EnhancedRuleEngineService
+from app.core.config import MAX_PARALLEL_WORKERS
 from app.services.data_quality import DataQualityService
+from app.utils.pii import redact_email
 
 router = APIRouter(prefix="/executions", tags=["Rule Executions"])
+
+logger = logging.getLogger(__name__)
 
 
 @router.get("", response_model=Dict[str, Any])
@@ -30,22 +44,21 @@ async def list_executions(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     status_filter: Optional[ExecutionStatus] = Query(
-        None, description="Filter by execution status"),
-    dataset_id: Optional[str] = Query(
-        None, description="Filter by dataset ID"),
+        None, description="Filter by execution status"
+    ),
+    dataset_id: Optional[str] = Query(None, description="Filter by dataset ID"),
     db: Session = Depends(get_session),
-    org_context: OrgContext = Depends(get_any_org_member_context)
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """
     List recent rule executions within organization with optional filtering.
     """
     # Join with DatasetVersion and Dataset to filter by organization
-    query = db.query(Execution).join(
-        DatasetVersion, Execution.dataset_version_id == DatasetVersion.id
-    ).join(
-        Dataset, DatasetVersion.dataset_id == Dataset.id
-    ).filter(
-        Dataset.organization_id == org_context.organization_id
+    query = (
+        db.query(Execution)
+        .join(DatasetVersion, Execution.dataset_version_id == DatasetVersion.id)
+        .join(Dataset, DatasetVersion.dataset_id == Dataset.id)
+        .filter(Dataset.organization_id == org_context.organization_id)
     )
 
     if status_filter:
@@ -59,26 +72,25 @@ async def list_executions(
 
     # Apply pagination
     offset = (page - 1) * size
-    executions = query.order_by(Execution.started_at.desc()).offset(
-        offset).limit(size).all()
+    executions = (
+        query.order_by(Execution.started_at.desc()).offset(offset).limit(size).all()
+    )
 
     # Enrich executions with issue counts
     execution_responses = []
     for execution in executions:
         execution_dict = execution.__dict__.copy()
         # Get issue count for this execution
-        issue_count = db.query(Issue).filter(
-            Issue.execution_id == execution.id).count()
-        execution_dict['total_issues'] = issue_count
-        execution_responses.append(
-            ExecutionResponse.model_validate(execution_dict))
+        issue_count = db.query(Issue).filter(Issue.execution_id == execution.id).count()
+        execution_dict["total_issues"] = issue_count
+        execution_responses.append(ExecutionResponse.model_validate(execution_dict))
 
     return {
         "items": execution_responses,
         "total": total,
         "page": page,
         "size": size,
-        "pages": (total + size - 1) // size
+        "pages": (total + size - 1) // size,
     }
 
 
@@ -86,32 +98,32 @@ async def list_executions(
 async def get_execution(
     execution_id: str,
     db: Session = Depends(get_session),
-    org_context: OrgContext = Depends(get_any_org_member_context)
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """
     Get details of a specific execution within organization.
     """
     # Filter execution by organization through dataset relationship
-    execution = db.query(Execution).join(
-        DatasetVersion, Execution.dataset_version_id == DatasetVersion.id
-    ).join(
-        Dataset, DatasetVersion.dataset_id == Dataset.id
-    ).filter(
-        Execution.id == execution_id,
-        Dataset.organization_id == org_context.organization_id
-    ).first()
+    execution = (
+        db.query(Execution)
+        .join(DatasetVersion, Execution.dataset_version_id == DatasetVersion.id)
+        .join(Dataset, DatasetVersion.dataset_id == Dataset.id)
+        .filter(
+            Execution.id == execution_id,
+            Dataset.organization_id == org_context.organization_id,
+        )
+        .first()
+    )
 
     if not execution:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Execution not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Execution not found"
         )
 
     # Enrich execution with issue count
     execution_dict = execution.__dict__.copy()
-    issue_count = db.query(Issue).filter(
-        Issue.execution_id == execution_id).count()
-    execution_dict['total_issues'] = issue_count
+    issue_count = db.query(Issue).filter(Issue.execution_id == execution_id).count()
+    execution_dict["total_issues"] = issue_count
 
     return ExecutionResponse.model_validate(execution_dict)
 
@@ -120,40 +132,52 @@ async def get_execution(
 async def create_execution(
     execution_data: ExecutionCreate,
     db: Session = Depends(get_session),
-    org_context: OrgContext = Depends(get_any_org_member_context)
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """
     Execute rules on a dataset version within organization.
     """
-    print(f"Creating execution with data: {execution_data}")
-    print(f"User: {org_context.user.email}")
+    logger.debug(f"Creating execution with data: {execution_data}")
+    logger.debug(f"User: {redact_email(org_context.user.email)}")
 
     # Get dataset version - try as version ID first, then as dataset ID
-    dataset_version = db.query(DatasetVersion).join(
-        Dataset, DatasetVersion.dataset_id == Dataset.id
-    ).filter(
-        DatasetVersion.id == execution_data.dataset_version_id,
-        Dataset.organization_id == org_context.organization_id
-    ).first()
+    dataset_version = (
+        db.query(DatasetVersion)
+        .join(Dataset, DatasetVersion.dataset_id == Dataset.id)
+        .filter(
+            DatasetVersion.id == execution_data.dataset_version_id,
+            Dataset.organization_id == org_context.organization_id,
+        )
+        .first()
+    )
 
-    print(f"Dataset version lookup result: {dataset_version}")
+    logger.debug(f"Dataset version lookup result: {dataset_version}")
 
     if not dataset_version:
-        print(
-            f"Dataset version not found, trying as dataset ID: {execution_data.dataset_version_id}")
+        logger.debug(
+            f"Dataset version not found, trying as dataset ID: {execution_data.dataset_version_id}"
+        )
         # If not found as version ID, try to find the latest version of the dataset
-        dataset = db.query(Dataset).filter(
-            Dataset.id == execution_data.dataset_version_id,
-            Dataset.organization_id == org_context.organization_id
-        ).first()
-        print(f"Dataset lookup result: {dataset}")
+        dataset = (
+            db.query(Dataset)
+            .filter(
+                Dataset.id == execution_data.dataset_version_id,
+                Dataset.organization_id == org_context.organization_id,
+            )
+            .first()
+        )
+        logger.debug(f"Dataset lookup result: {dataset}")
         if dataset:
             # Get the latest version for this dataset
-            dataset_version = db.query(DatasetVersion).filter(
-                DatasetVersion.dataset_id == dataset.id
-            ).order_by(DatasetVersion.created_at.desc()).first()
-            print(
-                f"Latest dataset version for dataset {dataset.id}: {dataset_version}")
+            dataset_version = (
+                db.query(DatasetVersion)
+                .filter(DatasetVersion.dataset_id == dataset.id)
+                .order_by(DatasetVersion.created_at.desc())
+                .first()
+            )
+            logger.debug(
+                f"Latest dataset version for dataset {dataset.id}: {dataset_version}"
+            )
 
             # If no versions exist, create one
             if not dataset_version:
@@ -162,7 +186,7 @@ async def create_execution(
                     dataset_id=dataset.id,
                     version_no=1,
                     created_by=org_context.user_id,
-                    created_at=datetime.now(timezone.utc)
+                    created_at=datetime.now(timezone.utc),
                 )
                 db.add(dataset_version)
                 db.commit()
@@ -171,7 +195,7 @@ async def create_execution(
     if not dataset_version:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dataset or dataset version not found"
+            detail="Dataset or dataset version not found",
         )
 
     # Check if dataset is accessible by user (you might want to add access control)
@@ -179,14 +203,12 @@ async def create_execution(
     try:
         # Use enhanced rule engine with parallel execution and comprehensive logging
         rule_service = EnhancedRuleEngineService(
-            db,
-            enable_parallel=True,
-            max_workers=4  # Configurable based on system resources
+            db, enable_parallel=True, max_workers=MAX_PARALLEL_WORKERS
         )
         execution = rule_service.execute_rules_on_dataset(
             dataset_version=dataset_version,
             rule_ids=execution_data.rule_ids,
-            current_user=org_context.user
+            current_user=org_context.user,
         )
 
         return ExecutionResponse.model_validate(execution)
@@ -200,42 +222,35 @@ async def create_execution(
         try:
             db.rollback()
         except Exception as rollback_error:
-            print(f"Database rollback error: {str(rollback_error)}")
+            logger.error("Database rollback error", exc_info=rollback_error)
 
-        error_details = {
-            "error": str(e),
-            "error_type": type(e).__name__,
-            "traceback": traceback.format_exc(),
-            "dataset_version_id": execution_data.dataset_version_id if execution_data else None,
-            "rule_ids": execution_data.rule_ids if execution_data else None
-        }
-        print(f"=== EXECUTION CREATION ERROR ===")
-        print(f"Error: {error_details}")
-        print(f"Full traceback:")
-        print(traceback.format_exc())
-        print(f"=== END ERROR ===")
-
-        # Print to stderr as well
-        import sys
-        sys.stderr.write(f"EXECUTION ERROR: {str(e)}\n")
-        sys.stderr.write(traceback.format_exc())
-        sys.stderr.flush()
+        error_id = str(uuid4())
+        logger.error(
+            f"Execution creation error [ref={error_id}]: {e}",
+            exc_info=True,
+            extra={
+                "dataset_version_id": (
+                    execution_data.dataset_version_id if execution_data else None
+                ),
+                "rule_ids": execution_data.rule_ids if execution_data else None,
+            },
+        )
 
         # Provide more specific error messages
-        if "FileNotFoundError" in str(type(e)):
+        if isinstance(e, FileNotFoundError):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Dataset file not found. Please ensure the dataset has been uploaded correctly."
+                detail="Dataset file not found. Please ensure the dataset has been uploaded correctly.",
             )
-        elif "ImportError" in str(type(e)):
+        elif isinstance(e, ImportError):
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Internal service error. Please contact system administrator."
+                detail="Internal service error. Please contact system administrator.",
             )
         else:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error executing rules: {str(e)}"
+                detail=f"Internal error. Reference: {error_id}",
             )
 
 
@@ -243,24 +258,19 @@ async def create_execution(
 async def get_execution_issues(
     execution_id: str,
     limit: int = Query(100, ge=1, le=1000),
-    severity: Optional[str] = Query(
-        None, description="Filter by issue severity"),
-    category: Optional[str] = Query(
-        None, description="Filter by issue category"),
-    resolved: Optional[bool] = Query(
-        None, description="Filter by resolution status"),
+    severity: Optional[str] = Query(None, description="Filter by issue severity"),
+    category: Optional[str] = Query(None, description="Filter by issue category"),
+    resolved: Optional[bool] = Query(None, description="Filter by resolution status"),
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    current_user: User = Depends(get_any_authenticated_user),
 ):
     """
     Get issues found during a specific execution
     """
-    execution = db.query(Execution).filter(
-        Execution.id == execution_id).first()
+    execution = db.query(Execution).filter(Execution.id == execution_id).first()
     if not execution:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Execution not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Execution not found"
         )
 
     query = db.query(Issue).filter(Issue.execution_id == execution_id)
@@ -283,23 +293,21 @@ async def get_execution_issues(
 async def get_execution_summary(
     execution_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    current_user: User = Depends(get_any_authenticated_user),
 ):
     """
     Get summary statistics for an execution
     """
-    execution = db.query(Execution).filter(
-        Execution.id == execution_id).first()
+    execution = db.query(Execution).filter(Execution.id == execution_id).first()
     if not execution:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Execution not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Execution not found"
         )
 
     # Get execution rules with their stats
-    execution_rules = db.query(ExecutionRule).filter(
-        ExecutionRule.execution_id == execution_id
-    ).all()
+    execution_rules = (
+        db.query(ExecutionRule).filter(ExecutionRule.execution_id == execution_id).all()
+    )
 
     # Get issues breakdown
     issues = db.query(Issue).filter(Issue.execution_id == execution_id).all()
@@ -311,12 +319,15 @@ async def get_execution_summary(
 
     for issue in issues:
         # Count by severity
-        severity = issue.severity.value if hasattr(
-            issue.severity, 'value') else str(issue.severity)
+        severity = (
+            issue.severity.value
+            if hasattr(issue.severity, "value")
+            else str(issue.severity)
+        )
         issues_by_severity[severity] = issues_by_severity.get(severity, 0) + 1
 
         # Count by category
-        category = issue.category or 'unknown'
+        category = issue.category or "unknown"
         issues_by_category[category] = issues_by_category.get(category, 0) + 1
 
         # Count by rule
@@ -325,7 +336,11 @@ async def get_execution_summary(
 
     return {
         "execution_id": execution_id,
-        "status": execution.status.value if hasattr(execution.status, 'value') else str(execution.status),
+        "status": (
+            execution.status.value
+            if hasattr(execution.status, "value")
+            else str(execution.status)
+        ),
         "total_rules": execution.total_rules,
         "total_rows": execution.total_rows,
         "rows_affected": execution.rows_affected,
@@ -341,7 +356,7 @@ async def get_execution_summary(
                 "error_count": er.error_count,
                 "rows_flagged": er.rows_flagged,
                 "cols_flagged": er.cols_flagged,
-                "note": er.note
+                "note": er.note,
             }
             for er in execution_rules
         ],
@@ -351,7 +366,7 @@ async def get_execution_summary(
             (execution.finished_at - execution.started_at).total_seconds()
             if execution.finished_at is not None and execution.started_at is not None
             else None
-        )
+        ),
     }
 
 
@@ -360,23 +375,21 @@ async def cancel_execution(
     execution_id: str,
     db: Session = Depends(get_session),
     # Only admins can cancel executions
-    current_user: User = Depends(get_admin_user)
+    current_user: User = Depends(get_admin_user),
 ):
     """
     Cancel a running execution (only for running executions)
     """
-    execution = db.query(Execution).filter(
-        Execution.id == execution_id).first()
+    execution = db.query(Execution).filter(Execution.id == execution_id).first()
     if not execution:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Execution not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Execution not found"
         )
 
     if execution.status != ExecutionStatus.running:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot cancel execution with status: {execution.status}"
+            detail=f"Cannot cancel execution with status: {execution.status}",
         )
 
     # Update execution status to cancelled
@@ -385,10 +398,9 @@ async def cancel_execution(
     execution.finished_at = db.execute("SELECT NOW()").scalar()
 
     # Update summary with cancellation info
-    current_summary = json.loads(
-        execution.summary) if execution.summary else {}
-    current_summary['cancelled_by'] = current_user.id
-    current_summary['cancellation_reason'] = 'Manual cancellation'
+    current_summary = json.loads(execution.summary) if execution.summary else {}
+    current_summary["cancelled_by"] = current_user.id
+    current_summary["cancellation_reason"] = "Manual cancellation"
     execution.summary = json.dumps(current_summary)
 
     db.commit()
@@ -400,40 +412,41 @@ async def cancel_execution(
 async def get_execution_rules(
     execution_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    current_user: User = Depends(get_any_authenticated_user),
 ):
     """
     Get performance details for each rule in an execution
     """
-    execution = db.query(Execution).filter(
-        Execution.id == execution_id).first()
+    execution = db.query(Execution).filter(Execution.id == execution_id).first()
     if not execution:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Execution not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Execution not found"
         )
 
-    execution_rules = db.query(ExecutionRule).filter(
-        ExecutionRule.execution_id == execution_id
-    ).all()
+    execution_rules = (
+        db.query(ExecutionRule).filter(ExecutionRule.execution_id == execution_id).all()
+    )
 
     result = []
     for er in execution_rules:
         # Get rule details
-        rule = er.rule if hasattr(er, 'rule') else None
+        rule = er.rule if hasattr(er, "rule") else None
 
         rule_info = {
             "rule_id": er.rule_id,
             "rule_name": rule.name if rule else "Unknown",
-            "rule_kind": rule.kind.value if rule and hasattr(rule.kind, 'value') else str(rule.kind) if rule else "Unknown",
+            "rule_kind": (
+                rule.kind.value
+                if rule and hasattr(rule.kind, "value")
+                else str(rule.kind) if rule else "Unknown"
+            ),
             "error_count": er.error_count,
             "rows_flagged": er.rows_flagged,
             "cols_flagged": er.cols_flagged,
             "note": er.note,
-            "issues_found": db.query(Issue).filter(
-                Issue.execution_id == execution_id,
-                Issue.rule_id == er.rule_id
-            ).count()
+            "issues_found": db.query(Issue)
+            .filter(Issue.execution_id == execution_id, Issue.rule_id == er.rule_id)
+            .count(),
         }
         result.append(rule_info)
 
@@ -444,7 +457,7 @@ async def get_execution_rules(
 async def get_execution_quality_metrics(
     execution_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    current_user: User = Depends(get_any_authenticated_user),
 ):
     """
     Get or compute comprehensive data quality metrics for an execution.

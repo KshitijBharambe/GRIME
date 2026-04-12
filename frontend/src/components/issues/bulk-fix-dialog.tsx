@@ -16,14 +16,17 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ArrowRight, AlertCircle, AlertTriangle, Info } from "lucide-react";
-import { Issue } from "@/lib/hooks/useIssues";
+import type { Issue } from "@/types/api";
 
 interface BulkFixDialogProps {
-  issues: Issue[];
-  open: boolean;
+  readonly issues: readonly Issue[];
+  readonly open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (fixData: { new_value?: string; comment?: string }) => Promise<void>;
-  isSubmitting?: boolean;
+  onSubmit: (fixData: {
+    new_value?: string;
+    comment?: string;
+  }) => Promise<void>;
+  readonly isSubmitting?: boolean;
 }
 
 export function BulkFixDialog({
@@ -45,13 +48,13 @@ export function BulkFixDialog({
     const datasetNames = new Set<string>();
     const severities = new Set<string>();
 
-    issues.forEach((issue) => {
+    for (const issue of issues) {
       ruleIds.add(issue.rule_id);
       if (issue.rule_name) ruleNames.add(issue.rule_name);
       columnNames.add(issue.column_name);
       if (issue.dataset_name) datasetNames.add(issue.dataset_name);
       severities.add(issue.severity);
-    });
+    }
 
     return {
       ruleIds,
@@ -128,9 +131,7 @@ export function BulkFixDialog({
       });
       handleOpenChange(false);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to apply bulk fix"
-      );
+      setError(err instanceof Error ? err.message : "Failed to apply bulk fix");
     }
   };
 
@@ -170,7 +171,9 @@ export function BulkFixDialog({
             <div className="flex items-start gap-2 p-3 bg-yellow-50 border border-yellow-200 text-yellow-900 rounded-md text-sm">
               <AlertTriangle className="h-5 w-5 mt-0.5 flex-shrink-0" />
               <div>
-                <div className="font-semibold mb-1">Warning: Mixed Selection</div>
+                <div className="font-semibold mb-1">
+                  Warning: Mixed Selection
+                </div>
                 <p>{warningInfo.message}</p>
               </div>
             </div>
@@ -236,7 +239,8 @@ export function BulkFixDialog({
               disabled={isSubmitting}
             />
             <p className="text-xs text-muted-foreground">
-              Common values: null, 0, N/A, Unknown, or leave empty to just mark as resolved
+              Common values: null, 0, N/A, Unknown, or leave empty to just mark
+              as resolved
             </p>
           </div>
 
@@ -263,13 +267,19 @@ export function BulkFixDialog({
                     key={issue.id}
                     className="flex items-center gap-2 p-2 bg-muted/50 rounded text-sm"
                   >
-                    <Badge variant={getSeverityColor(issue.severity)} className="text-xs">
+                    <Badge
+                      variant={getSeverityColor(issue.severity)}
+                      className="text-xs"
+                    >
                       {issue.severity}
                     </Badge>
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium truncate">{issue.rule_name}</div>
+                      <div className="font-medium truncate">
+                        {issue.rule_name}
+                      </div>
                       <div className="text-xs text-muted-foreground truncate">
-                        {issue.dataset_name} • Row {issue.row_index} • {issue.column_name}
+                        {issue.dataset_name} • Row {issue.row_index} •{" "}
+                        {issue.column_name}
                       </div>
                     </div>
                     <div className="flex items-center gap-1 text-xs">

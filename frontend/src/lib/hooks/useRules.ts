@@ -4,15 +4,17 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import apiClient from '@/lib/api'
 import { Rule, RuleCreate, RuleUpdate, PaginatedResponse, RuleTestRequest } from '@/types/api'
 import { useAuthenticatedApi } from './useAuthenticatedApi'
+import { QUERY_KEYS } from '@/lib/constants/queryKeys'
+import { LIST_STALE_TIME, ENTITY_STALE_TIME, STATIC_STALE_TIME } from '@/lib/constants'
 
 export function useRules(page: number = 1, size: number = 20) {
   const { isAuthenticated, hasToken } = useAuthenticatedApi()
 
   return useQuery<PaginatedResponse<Rule>>({
-    queryKey: ['rules', page, size],
+    queryKey: QUERY_KEYS.rules(page, size),
     queryFn: () => apiClient.getRules(),
     enabled: isAuthenticated && hasToken,
-    staleTime: 30000, // Consider data stale after 30 seconds
+    staleTime: LIST_STALE_TIME,
   })
 }
 
@@ -20,10 +22,10 @@ export function useRule(id: string) {
   const { isAuthenticated, hasToken } = useAuthenticatedApi()
 
   return useQuery<Rule>({
-    queryKey: ['rule', id],
+    queryKey: QUERY_KEYS.rule(id),
     queryFn: () => apiClient.getRule(id),
     enabled: isAuthenticated && hasToken && !!id,
-    staleTime: 60000, // Individual rules don't change as often
+    staleTime: ENTITY_STALE_TIME,
   })
 }
 
@@ -34,7 +36,7 @@ export function useCreateRule() {
     mutationFn: (ruleData: RuleCreate) => apiClient.createRule(ruleData),
     onSuccess: () => {
       // Invalidate rules list to refresh the cache
-      queryClient.invalidateQueries({ queryKey: ['rules'] })
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.rules() })
     },
   })
 }
@@ -47,9 +49,9 @@ export function useUpdateRule() {
       apiClient.updateRule(id, data),
     onSuccess: (updatedRule) => {
       // Update the specific rule in cache
-      queryClient.setQueryData(['rule', updatedRule.id], updatedRule)
+      queryClient.setQueryData(QUERY_KEYS.rule(updatedRule.id), updatedRule)
       // Also invalidate the rules list
-      queryClient.invalidateQueries({ queryKey: ['rules'] })
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.rules() })
     },
   })
 }
@@ -61,7 +63,7 @@ export function useDeleteRule() {
     mutationFn: (id: string) => apiClient.deleteRule(id),
     onSuccess: () => {
       // Invalidate rules list to refresh the cache
-      queryClient.invalidateQueries({ queryKey: ['rules'] })
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.rules() })
     },
   })
 }
@@ -77,10 +79,10 @@ export function useRuleKinds() {
   const { isAuthenticated, hasToken } = useAuthenticatedApi()
 
   return useQuery({
-    queryKey: ['rule-kinds'],
+    queryKey: QUERY_KEYS.ruleKinds,
     queryFn: () => apiClient.getRuleKinds(),
     enabled: isAuthenticated && hasToken,
-    staleTime: 300000, // Rule kinds don't change often - 5 minutes
+    staleTime: STATIC_STALE_TIME,
   })
 }
 
@@ -91,9 +93,9 @@ export function useActivateRule() {
     mutationFn: (id: string) => apiClient.activateRule(id),
     onSuccess: (_, id) => {
       // Update the specific rule in cache
-      queryClient.invalidateQueries({ queryKey: ['rule', id] })
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.rule(id) })
       // Also invalidate the rules list
-      queryClient.invalidateQueries({ queryKey: ['rules'] })
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.rules() })
     },
   })
 }
@@ -105,9 +107,9 @@ export function useDeactivateRule() {
     mutationFn: (id: string) => apiClient.deactivateRule(id),
     onSuccess: (_, id) => {
       // Update the specific rule in cache
-      queryClient.invalidateQueries({ queryKey: ['rule', id] })
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.rule(id) })
       // Also invalidate the rules list
-      queryClient.invalidateQueries({ queryKey: ['rules'] })
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.rules() })
     },
   })
 }
@@ -116,9 +118,9 @@ export function useRuleVersions(ruleId: string) {
   const { isAuthenticated, hasToken } = useAuthenticatedApi()
 
   return useQuery<Rule[]>({
-    queryKey: ['rule-versions', ruleId],
+    queryKey: QUERY_KEYS.ruleVersions(ruleId),
     queryFn: () => apiClient.getRuleVersions(ruleId),
     enabled: isAuthenticated && hasToken && !!ruleId,
-    staleTime: 60000,
+    staleTime: ENTITY_STALE_TIME,
   })
 }

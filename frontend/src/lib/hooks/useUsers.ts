@@ -6,12 +6,7 @@ import {
   UserCreate,
   UserRole
 } from '@/types/api'
-
-// Query keys
-const QUERY_KEYS = {
-  users: ['users'] as const,
-  user: (id: string) => ['user', id] as const,
-}
+import { QUERY_KEYS } from '@/lib/constants/queryKeys'
 
 // Hooks for users (admin only)
 export function useUsers() {
@@ -23,7 +18,7 @@ export function useUsers() {
 
 export function useCurrentUser() {
   return useQuery({
-    queryKey: ['currentUser'],
+    queryKey: QUERY_KEYS.currentUser,
     queryFn: () => apiClient.getCurrentUser(),
   })
 }

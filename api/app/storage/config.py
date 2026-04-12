@@ -4,7 +4,6 @@ Storage configuration and settings.
 Centralized configuration for storage backend settings.
 """
 
-import os
 from typing import Optional
 from pydantic import Field
 from pydantic_settings import BaseSettings
@@ -17,14 +16,18 @@ class StorageSettings(BaseSettings):
     storage_type: str = Field(default="minio", env="STORAGE_TYPE")
 
     # MinIO settings
-    storage_endpoint: str = Field(default="http://localhost:9000", env="STORAGE_ENDPOINT")
-    storage_access_key: str = Field(default="minioadmin", env="STORAGE_ACCESS_KEY")
-    storage_secret_key: str = Field(default="minioadmin", env="STORAGE_SECRET_KEY")
+    storage_endpoint: str = Field(
+        default="http://localhost:9000", env="STORAGE_ENDPOINT"
+    )
+    storage_access_key: str = Field(default="", env="STORAGE_ACCESS_KEY")
+    storage_secret_key: str = Field(default="", env="STORAGE_SECRET_KEY")
     storage_region: str = Field(default="us-east-1", env="STORAGE_REGION")
     storage_use_ssl: bool = Field(default=False, env="STORAGE_USE_SSL")
 
     # GCS settings
-    google_cloud_project: Optional[str] = Field(default=None, env="GOOGLE_CLOUD_PROJECT")
+    google_cloud_project: Optional[str] = Field(
+        default=None, env="GOOGLE_CLOUD_PROJECT"
+    )
     gcp_project_id: Optional[str] = Field(default=None, env="GCP_PROJECT_ID")
 
     # Common settings

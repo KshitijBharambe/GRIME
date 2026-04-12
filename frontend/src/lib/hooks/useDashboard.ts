@@ -4,12 +4,14 @@ import { useQuery } from "@tanstack/react-query";
 import apiClient from "@/lib/api";
 import { DashboardOverview } from "@/types/api";
 import { useAuthenticatedApi } from "./useAuthenticatedApi";
+import { QUERY_KEYS } from "@/lib/constants/queryKeys";
+import { REALTIME_REFETCH_INTERVAL, REALTIME_STALE_TIME, MAX_QUERY_RETRIES } from "@/lib/constants";
 
 export function useDashboardOverview() {
   const { isAuthenticated, hasToken } = useAuthenticatedApi();
 
   return useQuery<DashboardOverview>({
-    queryKey: ["dashboard-overview"],
+    queryKey: QUERY_KEYS.dashboardOverview,
     queryFn: async () => {
       try {
         const result = await apiClient.getDashboardOverview();
@@ -19,10 +21,8 @@ export function useDashboardOverview() {
       }
     },
     enabled: isAuthenticated && hasToken,
-    refetchInterval: 10000, // Refetch every 10 seconds for real-time updates
-    staleTime: 5000, // Consider data stale after 5 seconds
-    retry: (failureCount) => {
-      return failureCount < 3;
-    },
+    refetchInterval: REALTIME_REFETCH_INTERVAL,
+    staleTime: REALTIME_STALE_TIME,
+    retry: (failureCount) => failureCount < MAX_QUERY_RETRIES,
   });
 }

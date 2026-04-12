@@ -1,8 +1,16 @@
-from sqlalchemy import create_engine, MetaData, event
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.pool import QueuePool
 import os
 import logging
+
+from app.core.config import (
+    DB_POOL_SIZE,
+    DB_MAX_OVERFLOW,
+    DB_POOL_TIMEOUT_SECONDS,
+    DB_POOL_RECYCLE_SECONDS,
+    DB_STATEMENT_TIMEOUT_MS,
+)
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -15,13 +23,13 @@ if DB_URL is None:
 # Connection pool configuration for production
 # These settings are optimized for 256MB-1GB memory environments
 POOL_CONFIG = {
-    'pool_size': 3,              # Reduced from default 5 - fewer persistent connections
-    'max_overflow': 5,           # Allow 5 extra connections if pool exhausted (total max = 8)
-    'pool_timeout': 30,          # Wait up to 30s for available connection
-    'pool_recycle': 1800,        # Recycle connections after 30 mins (prevent stale connections)
-    'pool_pre_ping': True,       # Verify connection is alive before using
-    'poolclass': QueuePool,      # Use QueuePool for better connection reuse
-    'echo_pool': False,          # Set to True for debugging connection issues
+    "pool_size": DB_POOL_SIZE,
+    "max_overflow": DB_MAX_OVERFLOW,
+    "pool_timeout": DB_POOL_TIMEOUT_SECONDS,
+    "pool_recycle": DB_POOL_RECYCLE_SECONDS,
+    "pool_pre_ping": True,
+    "poolclass": QueuePool,
+    "echo_pool": False,
 }
 
 # Create engine with optimized pool settings
@@ -29,10 +37,9 @@ engine = create_engine(
     DB_URL,
     **POOL_CONFIG,
     # Additional optimization settings
-    connect_args={
-        "options": "-c statement_timeout=30000"  # 30 second query timeout
-    }
+    connect_args={"options": f"-c statement_timeout={DB_STATEMENT_TIMEOUT_MS}"},
 )
+
 
 # Add connection pool event listeners for monitoring
 @event.listens_for(engine, "connect")
@@ -40,22 +47,25 @@ def receive_connect(dbapi_conn, connection_record):
     """Log new connections"""
     logger.debug(f"New database connection established: {id(dbapi_conn)}")
 
+
 @event.listens_for(engine, "checkout")
 def receive_checkout(dbapi_conn, connection_record, connection_proxy):
     """Log connection checkouts from pool"""
     logger.debug(f"Connection checked out from pool: {id(dbapi_conn)}")
+
 
 @event.listens_for(engine, "checkin")
 def receive_checkin(dbapi_conn, connection_record):
     """Log connection returns to pool"""
     logger.debug(f"Connection returned to pool: {id(dbapi_conn)}")
 
+
 # Session configuration
 SessionLocal = sessionmaker(
     bind=engine,
     autocommit=False,
     autoflush=False,
-    expire_on_commit=False  # Don't expire objects after commit (reduces queries)
+    expire_on_commit=False,  # Don't expire objects after commit (reduces queries)
 )
 
 Base = declarative_base()
@@ -85,11 +95,11 @@ def get_pool_status():
     """
     pool = engine.pool
     return {
-        'size': pool.size(),
-        'checked_in': pool.checkedin(),
-        'checked_out': pool.checkedout(),
-        'overflow': pool.overflow(),
-        'total_connections': pool.size() + pool.overflow()
+        "size": pool.size(),
+        "checked_in": pool.checkedin(),
+        "checked_out": pool.checkedout(),
+        "overflow": pool.overflow(),
+        "total_connections": pool.size() + pool.overflow(),
     }
 
 

@@ -303,7 +303,7 @@ function DataProfileContent() {
             </div>
 
             {/* Profile Tabs */}
-            {isLoading ? (
+            {isLoading && (
               <Card>
                 <CardContent className="pt-6">
                   <div className="flex items-center justify-center py-8">
@@ -311,7 +311,9 @@ function DataProfileContent() {
                   </div>
                 </CardContent>
               </Card>
-            ) : profile ? (
+            )}
+
+            {!isLoading && profile && (
               <Tabs defaultValue="columns" className="space-y-6">
                 <TabsList>
                   <TabsTrigger value="columns">Column Analysis</TabsTrigger>
@@ -340,8 +342,8 @@ function DataProfileContent() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {columnStats.map((stat, index) => (
-                            <TableRow key={index}>
+                          {columnStats.map((stat) => (
+                            <TableRow key={stat.name}>
                               <TableCell className="font-medium">{stat.name}</TableCell>
                               <TableCell>
                                 <div className="flex items-center gap-2">
@@ -390,8 +392,8 @@ function DataProfileContent() {
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-4">
-                        {columnStats.slice(0, 5).map((stat, index) => (
-                          <div key={index} className="space-y-2">
+                        {columnStats.slice(0, 5).map((stat) => (
+                          <div key={stat.name} className="space-y-2">
                             <div className="flex justify-between text-sm">
                               <span className="font-medium">{stat.name}</span>
                               <span className={getDataQualityColor(100 - stat.nullPercentage)}>
@@ -476,7 +478,7 @@ function DataProfileContent() {
                                 return acc
                               }, {} as Record<string, number>)
                             ).map(([type, count]) => (
-                              <div key={type} className="flex justify-between items-center text-sm">
+                              <div key={`datatype-${type}`} className="flex justify-between items-center text-sm">
                                 <div className="flex items-center gap-2">
                                   {getDataTypeIcon(type)}
                                   <span className="capitalize">{type}</span>
@@ -491,7 +493,9 @@ function DataProfileContent() {
                   </Card>
                 </TabsContent>
               </Tabs>
-            ) : (
+            )}
+
+            {!isLoading && !profile && (
               <Card>
                 <CardContent className="pt-6">
                   <div className="text-center py-8">

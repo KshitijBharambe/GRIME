@@ -30,8 +30,9 @@ resource "google_secret_manager_secret_version" "versions" {
 }
 
 # IAM policy to allow Cloud Run service account to access secrets
+# Only create if cloud_run_service_account is provided
 resource "google_secret_manager_secret_iam_member" "cloud_run_access" {
-  for_each = var.secrets
+  for_each = var.cloud_run_service_account != null ? var.secrets : {}
 
   secret_id = google_secret_manager_secret.secrets[each.key].id
   role      = "roles/secretmanager.secretAccessor"

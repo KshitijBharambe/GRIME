@@ -5,8 +5,7 @@ Defines the interface that all storage implementations must follow.
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Optional, BinaryIO
-from datetime import datetime, timedelta
+from typing import List, Optional
 
 
 class StorageBackend(ABC):

@@ -15,14 +15,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { ArrowRight, AlertCircle } from "lucide-react";
-import { Issue } from "@/lib/hooks/useIssues";
+import type { Issue } from "@/types/api";
 
 interface FixDialogProps {
-  issue: Issue | null;
-  open: boolean;
+  readonly issue: Issue | null;
+  readonly open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (fixData: { new_value?: string; comment?: string }) => Promise<void>;
-  isSubmitting?: boolean;
+  onSubmit: (fixData: {
+    new_value?: string;
+    comment?: string;
+  }) => Promise<void>;
+  readonly isSubmitting?: boolean;
 }
 
 export function FixDialog({
@@ -41,7 +44,7 @@ export function FixDialog({
     if (newOpen && issue) {
       setNewValue(issue.suggested_value || "");
       setComment(
-        issue.suggested_value ? "Applied suggested fix" : "Manually resolved"
+        issue.suggested_value ? "Applied suggested fix" : "Manually resolved",
       );
       setError("");
     } else {
@@ -70,9 +73,7 @@ export function FixDialog({
       });
       handleOpenChange(false);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to apply fix"
-      );
+      setError(err instanceof Error ? err.message : "Failed to apply fix");
     }
   };
 
@@ -124,7 +125,9 @@ export function FixDialog({
 
           {/* Value Preview */}
           <div className="space-y-2">
-            <Label className="text-muted-foreground">Value Change Preview</Label>
+            <Label className="text-muted-foreground">
+              Value Change Preview
+            </Label>
             <div className="flex items-center gap-2 p-3 bg-muted rounded-md">
               <div className="flex-1">
                 <div className="text-xs text-muted-foreground mb-1">

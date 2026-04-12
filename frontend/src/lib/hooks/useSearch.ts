@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { useAuthenticatedApi } from './useAuthenticatedApi'
 import apiClient from '@/lib/api'
+import { ENTITY_STALE_TIME, SEARCH_GC_TIME } from '@/lib/constants'
+import { QUERY_KEYS } from '@/lib/constants/queryKeys'
 
 export interface SearchResult {
   type: string
@@ -24,7 +26,7 @@ export function useSearch(query: string, enabled: boolean = true) {
   const { isAuthenticated, hasToken } = useAuthenticatedApi()
 
   return useQuery({
-    queryKey: ['search', query],
+    queryKey: QUERY_KEYS.search(query),
     queryFn: async () => {
       if (!query || query.trim().length === 0) {
         return {
@@ -44,7 +46,7 @@ export function useSearch(query: string, enabled: boolean = true) {
       return response.data
     },
     enabled: enabled && query.trim().length > 0 && isAuthenticated && hasToken,
-    staleTime: 60000, // Cache for 60 seconds
-    gcTime: 300000, // Keep in cache for 5 minutes
+    staleTime: ENTITY_STALE_TIME,
+    gcTime: SEARCH_GC_TIME,
   })
 }
