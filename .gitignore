@@ -54,11 +54,7 @@ Backupfiles/
 # === Local data & generated files ===
 api/data/datasets/
 repomix-output.xml
-
-# Supabase
-.branches
-.temp
-
+ 
 # dotenvx
 .env.keys
 .env.local

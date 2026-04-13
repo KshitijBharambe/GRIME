@@ -180,7 +180,7 @@ async def get_export_history(
 async def download_export(
     export_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user),
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """
     Download an exported file
@@ -188,6 +188,37 @@ async def download_export(
     try:
         export_service = ExportService(db)
         file_path, download_filename = export_service.get_export_file(export_id)
+
+        # Verify export belongs to user's org
+        export = db.query(Export).filter(Export.id == export_id).first()
+        if not export:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Export not found"
+            )
+
+        dataset_version = (
+            db.query(DatasetVersion)
+            .filter(DatasetVersion.id == export.dataset_version_id)
+            .first()
+        )
+        if not dataset_version:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Version not found"
+            )
+
+        dataset = (
+            db.query(Dataset)
+            .filter(
+                Dataset.id == dataset_version.dataset_id,
+                Dataset.organization_id == org_context.organization_id,
+            )
+            .first()
+        )
+        if not dataset:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied",
+            )
 
         # Check if file exists
         if not Path(file_path).exists():
@@ -457,14 +488,21 @@ async def get_dashboard_overview(
             .subquery()
         )
         latest_versions = (
-            db.query(DatasetVersion)
-            .join(
-                latest_version_no_sq,
-                (DatasetVersion.dataset_id == latest_version_no_sq.c.dataset_id)
-                & (DatasetVersion.version_no == latest_version_no_sq.c.max_version_no),
+            (
+                db.query(DatasetVersion)
+                .join(
+                    latest_version_no_sq,
+                    (DatasetVersion.dataset_id == latest_version_no_sq.c.dataset_id)
+                    & (
+                        DatasetVersion.version_no
+                        == latest_version_no_sq.c.max_version_no
+                    ),
+                )
+                .all()
             )
-            .all()
-        ) if dataset_ids else []
+            if dataset_ids
+            else []
+        )
         version_by_dataset = {v.dataset_id: v for v in latest_versions}
 
         # Batch: all executions for latest versions (1 query instead of N)
@@ -767,14 +805,21 @@ async def get_all_datasets_quality_scores(
             .subquery()
         )
         latest_versions = (
-            db.query(DatasetVersion)
-            .join(
-                latest_version_no_sq,
-                (DatasetVersion.dataset_id == latest_version_no_sq.c.dataset_id)
-                & (DatasetVersion.version_no == latest_version_no_sq.c.max_version_no),
+            (
+                db.query(DatasetVersion)
+                .join(
+                    latest_version_no_sq,
+                    (DatasetVersion.dataset_id == latest_version_no_sq.c.dataset_id)
+                    & (
+                        DatasetVersion.version_no
+                        == latest_version_no_sq.c.max_version_no
+                    ),
+                )
+                .all()
             )
-            .all()
-        ) if dataset_ids else []
+            if dataset_ids
+            else []
+        )
         version_by_dataset = {v.dataset_id: v for v in latest_versions}
 
         # Batch: all executions for latest versions (1 query instead of N)
@@ -1138,9 +1183,7 @@ def _get_avg_execution_time(db: Session) -> float:
     result = (
         db.query(
             sa_func.avg(
-                sa_func.extract(
-                    "epoch", Execution.finished_at - Execution.started_at
-                )
+                sa_func.extract("epoch", Execution.finished_at - Execution.started_at)
             )
         )
         .filter(

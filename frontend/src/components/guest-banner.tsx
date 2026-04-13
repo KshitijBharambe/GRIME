@@ -23,7 +23,7 @@ export function GuestBanner() {
       <div className="flex items-center gap-2 text-amber-800 text-sm">
         <Clock className="h-4 w-4" />
         <span>Guest sandbox — your data expires after 1 hour.</span>
-        <Link href="/auth/register/personal">
+        <Link href="/auth/register">
           <Button
             variant="outline"
             size="sm"

@@ -15,6 +15,7 @@ from app.middleware.organization import OrganizationFilter
 from app.core.config import (
     ErrorMessages,
     MAX_FILE_SIZE_BYTES,
+    GUEST_MAX_FILE_SIZE_BYTES,
     MAX_JSON_ARRAY_ITEMS,
     MAX_JSON_KEY_LENGTH,
     MAX_JSON_STRING_VALUE_LENGTH,
@@ -178,6 +179,12 @@ def _sanitize_identifier(value: str, field_name: str) -> str:
         )
 
 
+def _get_upload_size_limit_bytes(org_context: OrgContext) -> int:
+    if org_context.is_guest:
+        return min(MAX_FILE_SIZE_BYTES, GUEST_MAX_FILE_SIZE_BYTES)
+    return MAX_FILE_SIZE_BYTES
+
+
 @router.post("/upload/file", response_model=Dict[str, Any])
 async def upload_file(
     file: UploadFile = File(...),
@@ -200,15 +207,17 @@ async def upload_file(
     # --- Content-type / extension validation ---
     _validate_content_type(sanitized_filename, file.content_type)
 
+    upload_limit_bytes = _get_upload_size_limit_bytes(org_context)
+
     # --- Early size gate using Content-Length header (cheap check) ---
-    if file.size is not None and file.size > MAX_FILE_SIZE_BYTES:
+    if file.size is not None and file.size > upload_limit_bytes:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"File size exceeds {MAX_FILE_SIZE_BYTES // (1024 * 1024)}MB limit",
+            detail=f"File size exceeds {upload_limit_bytes // (1024 * 1024)}MB limit",
         )
 
     # --- Streaming size-limited read (defends against missing/spoofed Content-Length) ---
-    file_bytes = await _read_file_with_size_limit(file)
+    file_bytes = await _read_file_with_size_limit(file, max_bytes=upload_limit_bytes)
 
     # Reset the file with the validated bytes so downstream can re-read
     from io import BytesIO

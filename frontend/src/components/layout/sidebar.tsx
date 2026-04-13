@@ -524,7 +524,7 @@ export function Sidebar({ isOpen, onClose }: Readonly<SidebarProps>) {
           {/* Guest sign-up CTA */}
           {isGuest && (
             <div className="border-t border-[var(--sidebar-border)] p-4">
-              <Link href="/auth/register/personal">
+              <Link href="/auth/register">
                 <Button className="w-full" size="sm">
                   <UserPlus className="h-4 w-4 mr-2" />
                   Sign Up Free

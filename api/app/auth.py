@@ -2,7 +2,7 @@ import logging
 import warnings
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
-from fastapi import HTTPException, status, Depends
+from fastapi import HTTPException, status, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from passlib.context import CryptContext
 from jose import JWTError, jwt
@@ -13,6 +13,12 @@ from app.database import get_session
 from app.utils.pii import redact_email, hash_email, redact_token
 
 logger = logging.getLogger(__name__)
+
+_GUEST_ALLOWED_MUTATION_PATHS = {
+    "/data/upload/file",
+    "/data/upload/json",
+}
+_MUTATING_HTTP_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 if not SECRET_KEY:
@@ -134,7 +140,33 @@ class OrgContext:
         return self.account_type == AccountType.GUEST
 
 
+def _is_guest_expired(user: User, now: Optional[datetime] = None) -> bool:
+    if not user.is_guest:
+        return False
+
+    if user.guest_expires_at is None:
+        return True
+
+    current_time = now or datetime.now(timezone.utc)
+    return user.guest_expires_at <= current_time
+
+
+def _enforce_guest_request_policy(org_context: OrgContext, request: Request) -> None:
+    if not org_context.is_guest:
+        return
+
+    method = request.method.upper()
+    path = request.url.path
+
+    if method in _MUTATING_HTTP_METHODS and path not in _GUEST_ALLOWED_MUTATION_PATHS:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Guest accounts cannot perform this mutation. Sign up to unlock full write access.",
+        )
+
+
 def get_org_context(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_session),
 ) -> OrgContext:
@@ -183,6 +215,14 @@ def get_org_context(
         logger.warning(f"[WARN] User not found or inactive: {user_id}")
         raise credentials_exception
 
+    if _is_guest_expired(user):
+        logger.info("[AUTH] Guest session expired for user_id=%s", user_id)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Guest session has expired. Please start a new guest session.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     # Validate organization exists
     organization = (
         db.query(Organization)
@@ -229,25 +269,45 @@ def get_org_context(
         )
         raise credentials_exception
 
-    # Parse account_type (defaults to ORGANIZATION for backward compatibility)
-    account_type = AccountType.ORGANIZATION
-    if account_type_str:
-        try:
-            account_type = AccountType(account_type_str)
-        except ValueError:
-            logger.warning(f"[WARN] Invalid account_type in token: {account_type_str}")
-            raise credentials_exception
+    # Use authoritative DB account classification when available.
+    if user.is_guest or organization.account_type == AccountType.GUEST:
+        account_type = AccountType.GUEST
+    else:
+        account_type = organization.account_type
+        if isinstance(account_type, str):
+            try:
+                account_type = AccountType(account_type)
+            except ValueError:
+                logger.warning(
+                    "[WARN] Invalid organization account_type in DB: %s",
+                    organization.account_type,
+                )
+                account_type = AccountType.ORGANIZATION
+
+        if account_type_str:
+            try:
+                AccountType(account_type_str)
+            except ValueError:
+                logger.warning(
+                    f"[WARN] Invalid account_type in token: {account_type_str}"
+                )
+                raise credentials_exception
 
     logger.info(
         f"[OK] User authenticated: {redact_email(user.email)} ({hash_email(user.email)}) in org {organization.name} as {role.value} (account_type={account_type.value})"
     )
 
-    return OrgContext(
+    org_context = OrgContext(
         user=user, organization=organization, role=role, account_type=account_type
     )
 
+    _enforce_guest_request_policy(org_context, request)
+
+    return org_context
+
 
 def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_session),
 ) -> User:
@@ -262,7 +322,7 @@ def get_current_user(
         DeprecationWarning,
         stacklevel=2,
     )
-    org_context = get_org_context(credentials, db)
+    org_context = get_org_context(request, credentials, db)
     return org_context.user
 
 

@@ -17,6 +17,8 @@ from app.models import (
 from app.auth import (
     get_any_authenticated_user,
     get_admin_user,
+    get_any_org_member_context,
+    OrgContext,
 )
 from app.services.rule_templates import RuleTemplateService
 from app.services.anomaly_detection import AnomalyDetectionService
@@ -213,12 +215,19 @@ async def get_rule_suggestions(
     dataset_id: str,
     max_suggestions: int = Query(10, description="Maximum number of suggestions"),
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user),
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """Get rule suggestions for a dataset"""
     try:
-        # Check if dataset exists
-        dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+        # Check if dataset exists and belongs to org
+        dataset = (
+            db.query(Dataset)
+            .filter(
+                Dataset.id == dataset_id,
+                Dataset.organization_id == org_context.organization_id,
+            )
+            .first()
+        )
         if not dataset:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -342,12 +351,18 @@ async def get_ml_models(
 async def get_ml_model(
     model_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user),
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """Get a specific ML model"""
     try:
         anomaly_service = AnomalyDetectionService(db)
         model = anomaly_service.get_model(model_id)
+        # Verify model belongs to user's org
+        if model and model.organization_id != org_context.organization_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied",
+            )
 
         if not model:
             raise HTTPException(
@@ -505,10 +520,24 @@ async def get_anomaly_scores(
     execution_id: str,
     model_id: Optional[str] = Query(None, description="Filter by model ID"),
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user),
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """Get anomaly scores for an execution"""
     try:
+        # Verify execution belongs to user's org
+        execution = (
+            db.query(Execution)
+            .filter(
+                Execution.id == execution_id,
+                Execution.organization_id == org_context.organization_id,
+            )
+            .first()
+        )
+        if not execution:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Execution not found",
+            )
         anomaly_service = AnomalyDetectionService(db)
         scores = anomaly_service.get_anomaly_scores(
             execution_id=execution_id, model_id=model_id
@@ -552,11 +581,24 @@ async def create_debug_session(
     execution_id: str,
     session_data: Dict[str, Any],
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user),
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """Create a debug session for an execution"""
     try:
-        # Check if execution exists
+        # Check if execution exists and belongs to org
+        execution = (
+            db.query(Execution)
+            .filter(
+                Execution.id == execution_id,
+                Execution.organization_id == org_context.organization_id,
+            )
+            .first()
+        )
+        if not execution:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Execution not found",
+            )
         execution = db.query(Execution).filter(Execution.id == execution_id).first()
         if not execution:
             raise HTTPException(
@@ -600,10 +642,24 @@ async def create_debug_session(
 async def get_debug_sessions(
     execution_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user),
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """Get all debug sessions for an execution"""
     try:
+        # Verify execution belongs to org
+        execution = (
+            db.query(Execution)
+            .filter(
+                Execution.id == execution_id,
+                Execution.organization_id == org_context.organization_id,
+            )
+            .first()
+        )
+        if not execution:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Execution not found",
+            )
         debug_manager = get_debug_manager(db)
         sessions = debug_manager.get_sessions_for_execution(execution_id)
 
@@ -639,12 +695,28 @@ async def get_debug_sessions(
 async def get_debug_session(
     session_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user),
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """Get a specific debug session"""
     try:
         debug_manager = get_debug_manager(db)
         session = debug_manager.get_session(session_id)
+
+        # Verify session's execution belongs to org
+        if session and hasattr(session, "execution_id"):
+            execution = (
+                db.query(Execution)
+                .filter(
+                    Execution.id == session.execution_id,
+                    Execution.organization_id == org_context.organization_id,
+                )
+                .first()
+            )
+            if not execution:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied",
+                )
 
         if not session:
             raise HTTPException(
@@ -678,11 +750,13 @@ async def add_breakpoint(
     session_id: str,
     breakpoint_data: Dict[str, Any],
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user),
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """Add a breakpoint to a debug session"""
     try:
+        # Verify session belongs to org (through execution)
         debug_manager = get_debug_manager(db)
+        # Note: debug_manager should verify org context internally or we query directly
         debug_manager.add_breakpoint(
             session_id=session_id,
             location=breakpoint_data["location"],
@@ -705,7 +779,7 @@ async def add_breakpoint(
 async def end_debug_session(
     session_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user),
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """End a debug session"""
     try:

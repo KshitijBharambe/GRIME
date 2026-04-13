@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { MainLayout } from "@/components/layout/main-layout";
+import { UnderTestingState } from "@/components/under-testing-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -89,6 +90,7 @@ function WebhookCard({
   wh,
   showSecret,
   copied,
+  isUnderTesting,
   onToggleSecret,
   onCopy,
   onToggleStatus,
@@ -98,6 +100,7 @@ function WebhookCard({
   wh: WebhookConfig;
   showSecret: boolean;
   copied: string | null;
+  isUnderTesting: boolean;
   onToggleSecret: () => void;
   onCopy: (text: string, key: string) => void;
   onToggleStatus: () => void;
@@ -111,7 +114,9 @@ function WebhookCard({
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-3">
-            <h3 className="text-base font-semibold text-foreground">{wh.name}</h3>
+            <h3 className="text-base font-semibold text-foreground">
+              {wh.name}
+            </h3>
             <WebhookStatusBadge isActive={isActive} />
           </div>
 
@@ -141,6 +146,7 @@ function WebhookCard({
             variant="outline"
             className="h-9 px-3"
             onClick={onRegenSecret}
+            disabled={isUnderTesting}
           >
             <RefreshCw className="mr-1.5 h-4 w-4" />
             Regenerate secret
@@ -150,6 +156,7 @@ function WebhookCard({
             variant="outline"
             className="h-9 px-3"
             onClick={onToggleStatus}
+            disabled={isUnderTesting}
           >
             {isActive ? "Deactivate" : "Activate"}
           </Button>
@@ -158,6 +165,7 @@ function WebhookCard({
             variant="outline"
             className="h-9 px-3 text-destructive hover:text-destructive"
             onClick={onDelete}
+            disabled={isUnderTesting}
           >
             <Trash2 className="mr-1.5 h-4 w-4" />
             Delete
@@ -249,6 +257,7 @@ function WebhookCard({
 }
 
 export default function WebhooksPage() {
+  const isUnderTesting = true;
   const [webhooks, setWebhooks] = useState<WebhookConfig[]>(INITIAL_WEBHOOKS);
   const [showSecret, setShowSecret] = useState<Record<string, boolean>>({});
   const [copied, setCopied] = useState<string | null>(null);
@@ -266,6 +275,7 @@ export default function WebhooksPage() {
   }
 
   function handleToggleStatus(id: string) {
+    if (isUnderTesting) return;
     setWebhooks((prev) =>
       prev.map((webhook) =>
         webhook.id === id
@@ -279,6 +289,7 @@ export default function WebhooksPage() {
   }
 
   function handleRegenSecret(id: string) {
+    if (isUnderTesting) return;
     const newSecret = `whs_${randomId("")}${randomId("")}`;
     setWebhooks((prev) =>
       prev.map((webhook) =>
@@ -288,10 +299,12 @@ export default function WebhooksPage() {
   }
 
   function handleDelete(id: string) {
+    if (isUnderTesting) return;
     setWebhooks((prev) => prev.filter((webhook) => webhook.id !== id));
   }
 
   function handleCreate() {
+    if (isUnderTesting) return;
     if (!newWebhookName.trim()) return;
 
     const id = randomId("wh");
@@ -361,13 +374,19 @@ export default function WebhooksPage() {
                 </div>
               </div>
 
-              <Button className="h-10" onClick={() => setCreating(true)}>
+              <Button
+                className="h-10"
+                onClick={() => setCreating(true)}
+                disabled={isUnderTesting}
+              >
                 <Plus className="mr-1.5 h-4 w-4" />
                 New webhook
               </Button>
             </div>
           </div>
         </section>
+
+        <UnderTestingState featureName="Webhook connectors" />
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
           <section className="space-y-4">
@@ -390,7 +409,11 @@ export default function WebhooksPage() {
                 <p className="mt-2 text-sm text-muted-foreground">
                   Create your first endpoint to start receiving payloads.
                 </p>
-                <Button className="mt-4" onClick={() => setCreating(true)}>
+                <Button
+                  className="mt-4"
+                  onClick={() => setCreating(true)}
+                  disabled={isUnderTesting}
+                >
                   <Plus className="mr-1.5 h-4 w-4" />
                   New webhook
                 </Button>
@@ -403,6 +426,7 @@ export default function WebhooksPage() {
                     wh={wh}
                     showSecret={!!showSecret[wh.id]}
                     copied={copied}
+                    isUnderTesting={isUnderTesting}
                     onToggleSecret={() => handleToggleSecret(wh.id)}
                     onCopy={handleCopy}
                     onToggleStatus={() => handleToggleStatus(wh.id)}
@@ -435,7 +459,10 @@ export default function WebhooksPage() {
                     <Input
                       autoFocus
                       value={newWebhookName}
-                      onChange={(event) => setNewWebhookName(event.target.value)}
+                      disabled={isUnderTesting}
+                      onChange={(event) =>
+                        setNewWebhookName(event.target.value)
+                      }
                       onKeyDown={(event) => {
                         if (event.key === "Enter") handleCreate();
                         if (event.key === "Escape") {
@@ -449,7 +476,10 @@ export default function WebhooksPage() {
                   </div>
 
                   <div className="flex gap-2">
-                    <Button onClick={handleCreate} disabled={!newWebhookName.trim()}>
+                    <Button
+                      onClick={handleCreate}
+                      disabled={!newWebhookName.trim() || isUnderTesting}
+                    >
                       <Plus className="mr-1.5 h-4 w-4" />
                       Create
                     </Button>
@@ -469,6 +499,7 @@ export default function WebhooksPage() {
                   variant="outline"
                   className="mt-4 w-full"
                   onClick={() => setCreating(true)}
+                  disabled={isUnderTesting}
                 >
                   <Plus className="mr-1.5 h-4 w-4" />
                   Add webhook
