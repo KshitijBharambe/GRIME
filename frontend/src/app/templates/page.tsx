@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { UnderTestingState } from "@/components/under-testing-state";
 import {
   Dialog,
   DialogContent,
@@ -81,6 +82,7 @@ function getHttpStatus(error: unknown): number | undefined {
 }
 
 export default function TemplatesPage() {
+  const isUnderTesting = true;
   const { hasToken } = useAuthenticatedApi();
   const [templates, setTemplates] = useState<RuleTemplate[]>([]);
   const [suggestions, setSuggestions] = useState<RuleSuggestion[]>([]);
@@ -99,8 +101,9 @@ export default function TemplatesPage() {
   const fetchTemplates = useCallback(async () => {
     try {
       const params: Record<string, string> = {};
-      if (selectedCategory) params.category = selectedCategory;
-      if (selectedKind) params.kind = selectedKind;
+      if (selectedCategory && selectedCategory !== "all")
+        params.category = selectedCategory;
+      if (selectedKind && selectedKind !== "all") params.kind = selectedKind;
 
       const response = await apiClient.get("/advanced/templates", { params });
       const data = response.data as { templates: RuleTemplate[] };
@@ -212,11 +215,16 @@ export default function TemplatesPage() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold">Rule Templates & Suggestions</h1>
-          <Button onClick={() => setIsCreateDialogOpen(true)}>
+          <Button
+            onClick={() => setIsCreateDialogOpen(true)}
+            disabled={isUnderTesting}
+          >
             <Plus className="mr-2 h-4 w-4" />
             Create Template
           </Button>
         </div>
+
+        <UnderTestingState featureName="Rule templates and AI suggestions" />
 
         {/* Filters */}
         <div className="flex gap-4 items-center">
@@ -230,7 +238,7 @@ export default function TemplatesPage() {
                 <SelectValue placeholder="All categories" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All categories</SelectItem>
+                <SelectItem value="all">All categories</SelectItem>
                 {categories.map((category) => (
                   <SelectItem key={category} value={category}>
                     {category}
@@ -247,7 +255,7 @@ export default function TemplatesPage() {
                 <SelectValue placeholder="All types" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All types</SelectItem>
+                <SelectItem value="all">All types</SelectItem>
                 {kinds.map((kind) => (
                   <SelectItem key={kind} value={kind}>
                     {kind}
@@ -293,6 +301,7 @@ export default function TemplatesPage() {
                   <Button
                     onClick={() => setIsCreateDialogOpen(true)}
                     className="mt-4"
+                    disabled={isUnderTesting}
                   >
                     Create your first template
                   </Button>
@@ -342,7 +351,7 @@ export default function TemplatesPage() {
                             setSelectedTemplate(template);
                             setIsApplyDialogOpen(true);
                           }}
-                          disabled={!selectedDataset}
+                          disabled={!selectedDataset || isUnderTesting}
                         >
                           <Play className="mr-2 h-4 w-4" />
                           Apply
@@ -425,6 +434,7 @@ export default function TemplatesPage() {
                                 onClick={() =>
                                   markSuggestionApplied(suggestion.id)
                                 }
+                                disabled={isUnderTesting}
                               >
                                 <CheckCircle className="mr-2 h-4 w-4" />
                                 Apply
@@ -540,6 +550,12 @@ export default function TemplatesPage() {
                   </Button>
                   <Button
                     onClick={() => {
+                      if (isUnderTesting) {
+                        toast.info(
+                          "Template application is under testing and will be available soon.",
+                        );
+                        return;
+                      }
                       const textareaElement = document.querySelector(
                         'textarea[placeholder*="JSON"]',
                       ) as HTMLTextAreaElement;
@@ -549,6 +565,7 @@ export default function TemplatesPage() {
                         : {};
                       applyTemplate(selectedTemplate.id, customizations);
                     }}
+                    disabled={isUnderTesting}
                   >
                     Apply Template
                   </Button>

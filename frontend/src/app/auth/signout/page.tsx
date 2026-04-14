@@ -33,7 +33,7 @@ export default function SignOutPage() {
           <div className="mx-auto h-16 w-16 rounded-full bg-primary flex items-center justify-center mb-4">
             <span className="text-primary-foreground font-bold text-xl">DH</span>
           </div>
-          <h1 className="text-3xl font-bold">Data Hygiene Tool</h1>
+          <h1 className="text-3xl font-bold">GRIME</h1>
         </div>
 
         <Card>

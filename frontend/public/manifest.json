@@ -1,7 +1,7 @@
 {
-  "name": "Data Hygiene Tool",
-  "short_name": "Data Hygiene",
-  "description": "Modern data quality management and cleansing platform",
+  "name": "GRIME",
+  "short_name": "GRIME",
+  "description": "Generalized Rule & Integrity Management Engine",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

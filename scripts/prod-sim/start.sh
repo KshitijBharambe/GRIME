@@ -57,22 +57,9 @@ source .env.prod-sim
 set +a
 echo -e "${GREEN}✓ Environment loaded${NC}"
 echo ""
-
-# Check if Supabase CLI is installed
+# Check prerequisites
 echo -e "${BLUE}Checking prerequisites...${NC}"
-
-if ! command -v supabase &> /dev/null; then
-    echo -e "${YELLOW}⚠ Supabase CLI not found${NC}"
-    echo "Install with: brew install supabase/tap/supabase"
-    echo ""
-    read -p "Continue without Supabase CLI? [y/N] " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
-    fi
-else
-    echo -e "${GREEN}✓ Supabase CLI found${NC}"
-fi
+echo -e "${YELLOW}Supabase integration removed — skipping Supabase CLI check${NC}"
 
 if ! command -v docker &> /dev/null; then
     echo -e "${RED}✗ Docker not found${NC}"
@@ -122,6 +109,13 @@ echo ""
 echo -e "${BLUE}Starting production simulation environment...${NC}"
 "${COMPOSE_CMD[@]}" --env-file .env.prod-sim up -d
 echo -e "${GREEN}✓ Services started${NC}"
+echo ""
+
+# Run migrations
+echo -e "${BLUE}Running database migrations...${NC}"
+./scripts/wait-for-db.sh grime-postgres admin data_hygiene
+"${COMPOSE_CMD[@]}" exec backend alembic -c migrations/alembic.ini upgrade head
+echo -e "${GREEN}✓ Migrations complete$(NC)"
 echo ""
 
 # Wait for services to be healthy

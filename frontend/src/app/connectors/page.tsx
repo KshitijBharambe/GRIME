@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { MainLayout } from "@/components/layout/main-layout";
+import { UnderTestingState } from "@/components/under-testing-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -157,8 +158,10 @@ function StatusBadge({
       className={cn(
         "inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium",
         isSoon && "border-border bg-muted/40 text-muted-foreground",
-        isConnecting && "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300",
-        isConnected && "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300",
+        isConnecting &&
+          "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300",
+        isConnected &&
+          "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300",
         !isSoon &&
           !isConnecting &&
           !isConnected &&
@@ -175,12 +178,14 @@ function CardFooterActions({
   isConnected,
   isConnecting,
   isConfiguring,
+  isUnderTesting,
   onConnect,
 }: Readonly<{
   connector: ConnectorDef;
   isConnected: boolean;
   isConnecting: boolean;
   isConfiguring: boolean;
+  isUnderTesting: boolean;
   onConnect: () => void;
 }>) {
   if (connector.status === "coming_soon") {
@@ -203,6 +208,7 @@ function CardFooterActions({
           variant="outline"
           className="h-9 px-3"
           onClick={onConnect}
+          disabled={isUnderTesting}
         >
           <Settings2 className="mr-1.5 h-4 w-4" />
           Configure
@@ -218,6 +224,7 @@ function CardFooterActions({
           size="sm"
           variant="outline"
           className="h-9 w-full justify-between"
+          disabled={isUnderTesting}
         >
           <span className="flex items-center gap-2">
             <Plug className="h-4 w-4" />
@@ -235,7 +242,7 @@ function CardFooterActions({
       variant={isConfiguring ? "outline" : "default"}
       className="h-9 w-full"
       onClick={onConnect}
-      disabled={isConnecting}
+      disabled={isConnecting || isUnderTesting}
     >
       {isConnecting && (
         <>
@@ -264,6 +271,7 @@ function ConnectorCard({
   isConnected,
   isConnecting,
   isConfiguring,
+  isUnderTesting,
   onConnect,
   onCancelConfig,
   onSave,
@@ -272,6 +280,7 @@ function ConnectorCard({
   isConnected: boolean;
   isConnecting: boolean;
   isConfiguring: boolean;
+  isUnderTesting: boolean;
   onConnect: () => void;
   onCancelConfig: () => void;
   onSave: () => void;
@@ -353,7 +362,12 @@ function ConnectorCard({
             </div>
 
             <div className="mt-4 flex gap-2">
-              <Button size="sm" className="h-9 px-4" onClick={onSave}>
+              <Button
+                size="sm"
+                className="h-9 px-4"
+                onClick={onSave}
+                disabled={isUnderTesting}
+              >
                 <Check className="mr-1.5 h-4 w-4" />
                 Save
               </Button>
@@ -362,6 +376,7 @@ function ConnectorCard({
                 variant="outline"
                 className="h-9 px-4"
                 onClick={onCancelConfig}
+                disabled={isUnderTesting}
               >
                 Cancel
               </Button>
@@ -375,6 +390,7 @@ function ConnectorCard({
             isConnected={isConnected}
             isConnecting={isConnecting}
             isConfiguring={isConfiguring}
+            isUnderTesting={isUnderTesting}
             onConnect={onConnect}
           />
         </div>
@@ -384,6 +400,7 @@ function ConnectorCard({
 }
 
 export default function ConnectorsPage() {
+  const isUnderTesting = true;
   const [connecting, setConnecting] = useState<string | null>(null);
   const [connected, setConnected] = useState<string[]>([]);
   const [configuring, setConfiguring] = useState<string | null>(null);
@@ -393,6 +410,7 @@ export default function ConnectorsPage() {
   ).length;
 
   function handleConnect(id: string) {
+    if (isUnderTesting) return;
     if (configuring === id) {
       setConfiguring(null);
       return;
@@ -406,6 +424,7 @@ export default function ConnectorsPage() {
   }
 
   function handleSave(id: string) {
+    if (isUnderTesting) return;
     setConfiguring(null);
     setConnecting(id);
     setTimeout(() => {
@@ -461,6 +480,8 @@ export default function ConnectorsPage() {
           </div>
         </section>
 
+        <UnderTestingState featureName="Data source connectors" />
+
         <section className="space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -484,6 +505,7 @@ export default function ConnectorsPage() {
                 isConnected={connected.includes(connector.id)}
                 isConnecting={connecting === connector.id}
                 isConfiguring={configuring === connector.id}
+                isUnderTesting={isUnderTesting}
                 onConnect={() => handleConnect(connector.id)}
                 onCancelConfig={handleCancelConfig}
                 onSave={() => handleSave(connector.id)}

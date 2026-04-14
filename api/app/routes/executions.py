@@ -262,12 +262,19 @@ async def get_execution_issues(
     category: Optional[str] = Query(None, description="Filter by issue category"),
     resolved: Optional[bool] = Query(None, description="Filter by resolution status"),
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user),
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """
     Get issues found during a specific execution
     """
-    execution = db.query(Execution).filter(Execution.id == execution_id).first()
+    execution = (
+        db.query(Execution)
+        .filter(
+            Execution.id == execution_id,
+            Execution.organization_id == org_context.organization_id,
+        )
+        .first()
+    )
     if not execution:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Execution not found"
@@ -293,12 +300,19 @@ async def get_execution_issues(
 async def get_execution_summary(
     execution_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user),
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """
     Get summary statistics for an execution
     """
-    execution = db.query(Execution).filter(Execution.id == execution_id).first()
+    execution = (
+        db.query(Execution)
+        .filter(
+            Execution.id == execution_id,
+            Execution.organization_id == org_context.organization_id,
+        )
+        .first()
+    )
     if not execution:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Execution not found"

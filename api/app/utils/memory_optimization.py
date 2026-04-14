@@ -1,5 +1,5 @@
 """
-Memory optimization utilities for the Data Hygiene Toolkit.
+Memory optimization utilities for GRIME.
 Provides chunking, streaming, and memory monitoring capabilities.
 """
 

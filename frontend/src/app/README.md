@@ -1,4 +1,4 @@
-# Data Hygiene Tool - Frontend
+# GRIME - Frontend
 
 A modern data quality management platform built with Next.js 15, featuring real-time monitoring, automated data validation, and comprehensive reporting capabilities.
 

@@ -1,6 +1,6 @@
 # ============================================================================
 # Terraform Variables
-# Data Hygiene Toolkit - GCP Infrastructure
+# GRIME - GCP Infrastructure
 # ============================================================================
 
 # Project Configuration

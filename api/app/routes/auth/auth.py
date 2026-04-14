@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
 import uuid
@@ -708,12 +709,20 @@ async def remove_member(
 async def guest_login(db: Session = Depends(get_session)):
     """Create a temporary guest session with a sandbox organization."""
     result = create_guest_session(db)
-    return GuestLoginResponse(
+    response = GuestLoginResponse(
         user_id=result["user_id"],
         email=result["email"],
         organization_id=result["organization_id"],
         access_token=result["access_token"],
         expires_at=result["expires_at"],
+    )
+    return JSONResponse(
+        content=response.model_dump(mode="json"),
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
     )
 
 

@@ -1,6 +1,6 @@
 # ============================================================================
 # Docker Compose - Base Configuration
-# Data Hygiene Toolkit
+# GRIME
 #
 # This file defines the base services that are shared across all environments.
 # Override with docker-compose.dev.yml or docker-compose.prod-sim.yml
@@ -12,7 +12,7 @@ services:
   # ==========================================================================
   postgres:
     image: postgres:17-alpine
-    container_name: dht-postgres
+    container_name: grime-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-admin}
@@ -42,7 +42,7 @@ services:
   # ==========================================================================
   minio:
     image: minio/minio:latest
-    container_name: dht-minio
+    container_name: grime-minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
     env_file:
@@ -60,7 +60,7 @@ services:
   # ==========================================================================
   minio-init:
     image: minio/mc:latest
-    container_name: dht-minio-init
+    container_name: grime-minio-init
     depends_on:
       - minio
     env_file:
@@ -74,8 +74,8 @@ services:
         sleep 2;
       done;
       if [ $$attempt -ge 30 ]; then echo 'MinIO did not become available'; exit 1; fi;
-      mc mb local/${STORAGE_BUCKET:-data-hygiene-local} --ignore-existing;
-      mc anonymous set download local/${STORAGE_BUCKET:-data-hygiene-local};
+      mc mb local/${STORAGE_BUCKET:-grime-local} --ignore-existing;
+      mc anonymous set download local/${STORAGE_BUCKET:-grime-local};
       echo 'MinIO buckets initialized successfully';
       "
     networks:
@@ -91,7 +91,7 @@ services:
       target: ${BUILD_TARGET:-development}
       args:
         BUILDKIT_INLINE_CACHE: 1
-    container_name: dht-backend
+    container_name: grime-backend
     restart: unless-stopped
     depends_on:
       - postgres
@@ -134,7 +134,7 @@ services:
         BUILDKIT_INLINE_CACHE: 1
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
         NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
-    container_name: dht-frontend
+    container_name: grime-frontend
     restart: unless-stopped
     depends_on:
       - backend
@@ -149,6 +149,9 @@ services:
       # Next.js
       NODE_ENV: ${NODE_ENV:-development}
       NEXT_TELEMETRY_DISABLED: 1
+
+      # [TUNNEL-FIX] Explicitly set the tunnel host to ensure Next.js allows the connection.
+      DEV_TUNNEL_HOST: "grime.kshitij.space"
 
       # Authentication (if using NextAuth)
       NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
@@ -175,11 +178,11 @@ services:
 # ============================================================================
 networks:
   frontend-network:
-    name: dht-frontend-network
+    name: grime-frontend-network
     driver: bridge
 
   backend-network:
-    name: dht-backend-network
+    name: grime-backend-network
     driver: bridge
     # In prod-sim, this should be internal: true
 
@@ -188,7 +191,7 @@ networks:
 # ============================================================================
 volumes:
   postgres-data:
-    name: dht-postgres-data
+    name: grime-postgres-data
 
   minio-data:
-    name: dht-minio-data
+    name: grime-minio-data

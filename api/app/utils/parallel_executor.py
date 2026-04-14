@@ -1,5 +1,5 @@
 """
-Parallel rule execution service for the Data Hygiene Toolkit.
+Parallel rule execution service for GRIME.
 Provides thread-safe parallel processing of independent rules with dependency analysis.
 """
 

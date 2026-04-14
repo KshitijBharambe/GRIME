@@ -1,5 +1,5 @@
 # ============================================================================
-# Multi-Stage Dockerfile for Data Hygiene Toolkit Frontend
+# Multi-Stage Dockerfile for GRIME Frontend
 # Node.js 22 LTS + Next.js 15
 # Targets: base -> development -> builder -> production
 # ============================================================================

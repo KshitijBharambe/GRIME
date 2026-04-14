@@ -51,6 +51,7 @@ class ApiClient {
   private client: AxiosInstance;
   private token: string | null = null;
   private readonly maxRetries = 2;
+  private authFailureHandled = false;
 
   constructor(baseURL: string = getApiUrl()) {
     // Ensure HTTPS in production
@@ -108,11 +109,64 @@ class ApiClient {
           }
         }
 
-        // Don't automatically clear token on 401 - let NextAuth handle session management
-        // The token will be re-synced by useAuthenticatedApi hook
+        this.handleAuthenticationFailure(error);
         return Promise.reject(error);
       },
     );
+  }
+
+  private handleAuthenticationFailure(error: unknown) {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const axiosError = error as {
+      response?: {
+        status?: number;
+        data?: { detail?: unknown; message?: unknown; code?: unknown };
+      };
+    };
+
+    const status = axiosError.response?.status;
+    const detail = String(
+      axiosError.response?.data?.detail ?? "",
+    ).toLowerCase();
+    const message = String(
+      axiosError.response?.data?.message ?? "",
+    ).toLowerCase();
+    const code = String(axiosError.response?.data?.code ?? "").toLowerCase();
+
+    const indicatesGuestExpired =
+      (detail.includes("guest") && detail.includes("expire")) ||
+      (message.includes("guest") && message.includes("expire")) ||
+      code.includes("guest_expired") ||
+      code.includes("guest-expired");
+
+    const isUnauthorized = status === 401;
+
+    if (!isUnauthorized && !indicatesGuestExpired) {
+      return;
+    }
+
+    this.clearToken();
+
+    if (this.authFailureHandled) {
+      return;
+    }
+
+    this.authFailureHandled = true;
+    window.dispatchEvent(
+      new CustomEvent("app:force-signout", {
+        detail: {
+          reason: indicatesGuestExpired ? "guest-expired" : "unauthorized",
+          status,
+        },
+      }),
+    );
+
+    window.setTimeout(() => {
+      this.authFailureHandled = false;
+    }, 1500);
   }
 
   setToken(token: string) {

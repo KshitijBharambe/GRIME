@@ -1,12 +1,12 @@
 #!/bin/bash
 # ============================================================================
-# Setup Script for Data Hygiene Toolkit
+# Setup Script for GRIME
 # First-time project setup
 # ============================================================================
 
 set -e
 
-echo "🚀 Setting up Data Hygiene Toolkit..."
+echo "🚀 Setting up GRIME..."
 
 # Colors
 GREEN='\033[0;32m'

@@ -1,5 +1,5 @@
 # ============================================================================
-# Multi-Stage Dockerfile for Data Hygiene Toolkit Backend
+# Multi-Stage Dockerfile for GRIME Backend
 # Python 3.13 + FastAPI + Gunicorn
 # Targets: base -> development -> production
 # Uses pyproject.toml with uv package manager

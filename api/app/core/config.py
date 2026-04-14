@@ -25,11 +25,11 @@ class Settings(BaseSettings):
     # App
     ENVIRONMENT: str = "production"
     DEBUG: bool = False
-    APP_NAME: str = "Data Hygiene Toolkit"
+    APP_NAME: str = "GRIME"
 
     # CORS — comma-separated origins
     CORS_ORIGINS: str = (
-        "https://dht.kshitij.space,https://kshitij.space,http://localhost:3000,http://localhost:8000"
+        "https://grime.kshitij.space,https://kshitij.space,http://localhost:3000,http://localhost:8000"
     )
     CORS_ORIGIN_REGEX: str = (
         r"https://.*-hzy3s-projects\.vercel\.app|https://.*\.kshitij\.space"
@@ -198,7 +198,7 @@ RATE_LIMIT_WINDOW_SECONDS = 60
 GUEST_SESSION_TTL_HOURS = 1
 GUEST_UPLOAD_LIMIT = 3
 GUEST_EXECUTION_LIMIT = 5
-GUEST_MAX_FILE_SIZE_BYTES = 1_048_576  # 1 MB
+GUEST_MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
 GUEST_CLEANUP_INTERVAL_SECONDS = 900  # 15 minutes
 
 # ---------------------------------------------------------------------------

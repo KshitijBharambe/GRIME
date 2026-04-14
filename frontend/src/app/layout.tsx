@@ -20,8 +20,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Data Hygiene Tool",
-  description: "Modern data quality management and cleansing platform",
+  title: "GRIME",
+  description: "Generalized Rule & Integrity Management Engine",
   keywords: ["data quality", "data cleansing", "data validation", "ETL"],
   icons: {
     icon: [

@@ -6,7 +6,7 @@
 
 set -e
 
-echo "🔧 Initializing Data Hygiene Toolkit database..."
+echo "🔧 Initializing GRIME database..."
 
 # Create extensions if needed
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL

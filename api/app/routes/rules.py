@@ -269,12 +269,16 @@ async def test_rule(
     rule_id: str,
     test_data: RuleTestRequest,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user),
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """
     Test a rule against sample data
     """
-    rule = db.query(Rule).filter(Rule.id == rule_id).first()
+    rule = (
+        db.query(Rule)
+        .filter(Rule.id == rule_id, Rule.organization_id == org_context.organization_id)
+        .first()
+    )
     if not rule:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Rule not found"
@@ -412,12 +416,16 @@ async def get_rule_executions(
     rule_id: str,
     limit: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user),
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """
     Get execution history for a specific rule
     """
-    rule = db.query(Rule).filter(Rule.id == rule_id).first()
+    rule = (
+        db.query(Rule)
+        .filter(Rule.id == rule_id, Rule.organization_id == org_context.organization_id)
+        .first()
+    )
     if not rule:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Rule not found"
@@ -439,13 +447,17 @@ async def get_rule_executions(
 async def get_rule_versions(
     rule_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user),
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """
     Get all versions of a rule
     """
     # Get the rule (could be any version)
-    rule = db.query(Rule).filter(Rule.id == rule_id).first()
+    rule = (
+        db.query(Rule)
+        .filter(Rule.id == rule_id, Rule.organization_id == org_context.organization_id)
+        .first()
+    )
     if not rule:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Rule not found"
@@ -470,13 +482,17 @@ async def get_rule_version(
     rule_id: str,
     version_number: int,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user),
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """
     Get a specific version of a rule
     """
     # Find root rule
-    rule = db.query(Rule).filter(Rule.id == rule_id).first()
+    rule = (
+        db.query(Rule)
+        .filter(Rule.id == rule_id, Rule.organization_id == org_context.organization_id)
+        .first()
+    )
     if not rule:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Rule not found"
@@ -509,12 +525,16 @@ async def get_rule_issues(
     resolved: Optional[bool] = Query(None, description="Filter by resolution status"),
     limit: int = Query(50, ge=1, le=1000),
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user),
+    org_context: OrgContext = Depends(get_any_org_member_context),
 ):
     """
     Get issues found by a specific rule
     """
-    rule = db.query(Rule).filter(Rule.id == rule_id).first()
+    rule = (
+        db.query(Rule)
+        .filter(Rule.id == rule_id, Rule.organization_id == org_context.organization_id)
+        .first()
+    )
     if not rule:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Rule not found"

@@ -1,6 +1,6 @@
 # ============================================================================
 # Terraform Providers Configuration
-# Data Hygiene Toolkit - GCP Infrastructure
+# GRIME - GCP Infrastructure
 # ============================================================================
 
 terraform {
