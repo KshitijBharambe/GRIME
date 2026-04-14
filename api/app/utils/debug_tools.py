@@ -1,6 +1,6 @@
 """
 Debug tools and utilities for enhanced testing and debugging capabilities.
-Provides comprehensive debugging, profiling, and testing utilities for the data hygiene toolkit.
+Provides comprehensive debugging, profiling, and testing utilities for GRIME.
 """
 
 import json

@@ -72,7 +72,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Data Hygiene Tool API",
+    title="GRIME API",
     description="API for data quality management and cleansing",
     version="1.0.0",
     redirect_slashes=True,  # Prevent automatic slash redirects that break POST requests
@@ -138,7 +138,7 @@ app.include_router(access_requests.router)
 
 @app.get("/")
 def read_root():
-    return {"message": "Data Hygiene Tool API", "version": "1.0.0"}
+    return {"message": "GRIME API", "version": "1.0.0"}
 
 
 @app.get("/health")

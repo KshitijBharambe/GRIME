@@ -25,11 +25,11 @@ class Settings(BaseSettings):
     # App
     ENVIRONMENT: str = "production"
     DEBUG: bool = False
-    APP_NAME: str = "Data Hygiene Toolkit"
+    APP_NAME: str = "GRIME"
 
     # CORS — comma-separated origins
     CORS_ORIGINS: str = (
-        "https://dht.kshitij.space,https://kshitij.space,http://localhost:3000,http://localhost:8000"
+        "https://grime.kshitij.space,https://kshitij.space,http://localhost:3000,http://localhost:8000"
     )
     CORS_ORIGIN_REGEX: str = (
         r"https://.*-hzy3s-projects\.vercel\.app|https://.*\.kshitij\.space"

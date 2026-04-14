@@ -1,4 +1,4 @@
-# Terraform - Data Hygiene Toolkit GCP Infrastructure
+# Terraform - GRIME GCP Infrastructure
 
 Complete infrastructure as code for deploying to Google Cloud Platform.
 

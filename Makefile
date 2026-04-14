@@ -1,5 +1,5 @@
 # ============================================================================
-# Data Hygiene Toolkit - Makefile
+# GRIME - Makefile
 # Production-Grade Development & Deployment
 # ============================================================================
 
@@ -25,7 +25,7 @@ export COMPOSE_DOCKER_CLI_BUILD := 1
 ##@ General
 
 help: ## Display this help message
-	@echo "$(BLUE)Data Hygiene Toolkit - Development Commands$(NC)"
+	@echo "$(BLUE)GRIME - Development Commands$(NC)"
 	@echo ""
 	@awk 'BEGIN {FS = ":.*##"; printf "Usage:\n  make $(YELLOW)<target>$(NC)\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  $(GREEN)%-25s$(NC) %s\n", $$1, $$2 } /^##@/ { printf "\n$(BLUE)%s$(NC)\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
@@ -87,6 +87,7 @@ prod-sim-build: ## Build production simulation containers
 prod-sim-up: ## Start production simulation
 	@echo "$(GREEN)Starting production simulation...$(NC)"
 	@$(COMPOSE_PROD_SIM) up -d
+	@$(MAKE) prod-sim-migrate
 	@echo "$(GREEN)✓ Production simulation started$(NC)"
 	@echo ""
 	@echo "$(BLUE)Services available at:$(NC)"
@@ -122,12 +123,25 @@ prod-sim-clean: ## Clean production simulation (remove volumes)
 
 rebuild: prod-sim-clean prod-sim ## Full rebuild of production simulation
 
-##@ Database Operations
+# Profile-aware migration (default to dev)
+PROFILE ?= dev
+ifeq ($(PROFILE),prod-sim)
+    COMPOSE_MIGRATE := $(COMPOSE_PROD_SIM)
+else
+    COMPOSE_MIGRATE := $(COMPOSE_DEV)
+endif
 
-db-migrate: ## Run database migrations
-	@echo "$(GREEN)Running database migrations...$(NC)"
-	@$(COMPOSE_DEV) exec backend alembic upgrade head
+db-migrate: ## Run database migrations (usage: make db-migrate [PROFILE=prod-sim])
+	@echo "$(GREEN)Running database migrations ($(PROFILE))...$(NC)"
+	@$(COMPOSE_MIGRATE) exec backend alembic -c migrations/alembic.ini upgrade head
 	@echo "$(GREEN)✓ Migrations complete$(NC)"
+
+prod-sim-migrate: ## Wait for DB and run migrations in prod-sim
+	@echo "$(BLUE)Waiting for database to be ready...$(NC)"
+	@./scripts/wait-for-db.sh grime-postgres admin data_hygiene
+	@echo "$(GREEN)Running migrations in production simulation...$(NC)"
+	@$(COMPOSE_PROD_SIM) exec backend alembic -c migrations/alembic.ini upgrade head
+	@echo "$(GREEN)✓ Production migrations complete$(NC)"
 
 db-migrate-create: ## Create new migration (usage: make db-migrate-create MSG="description")
 	@if [ -z "$(MSG)" ]; then \
@@ -136,11 +150,11 @@ db-migrate-create: ## Create new migration (usage: make db-migrate-create MSG="d
 		exit 1; \
 	fi
 	@echo "$(GREEN)Creating migration: $(MSG)$(NC)"
-	@$(COMPOSE_DEV) exec backend alembic revision --autogenerate -m "$(MSG)"
+	@$(COMPOSE_DEV) exec backend alembic -c migrations/alembic.ini revision --autogenerate -m "$(MSG)"
 
-db-shell: ## Open PostgreSQL shell
-	@echo "$(GREEN)Opening PostgreSQL shell...$(NC)"
-	@$(COMPOSE_DEV) exec postgres psql -U admin -d data_hygiene
+db-shell: ## Open PostgreSQL shell (defaults to dev)
+	@echo "$(GREEN)Opening PostgreSQL shell ($(PROFILE))...$(NC)"
+	@$(COMPOSE_MIGRATE) exec postgres psql -U admin -d data_hygiene
 
 db-backup: ## Backup database to ./backups/
 	@mkdir -p backups
@@ -252,7 +266,7 @@ status: ## Show container status
 	@$(COMPOSE_DEV) ps
 
 docker-stats: ## Show Docker resource usage
-	@docker stats --no-stream --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}" | grep -E "(dht-|CONTAINER)"
+	@docker stats --no-stream --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}" | grep -E "(grime-|CONTAINER)"
 
 ##@ Cleanup
 
@@ -285,7 +299,7 @@ clean-all: clean clean-volumes clean-docker ## Nuclear option: clean everything
 ##@ Setup & Installation
 
 setup: ## First-time project setup
-	@echo "$(GREEN)Setting up Data Hygiene Toolkit...$(NC)"
+	@echo "$(GREEN)Setting up GRIME...$(NC)"
 	@if [ ! -f .env ]; then \
 		cp .env.example .env; \
 		echo "$(GREEN)✓ Created .env$(NC)"; \
@@ -311,4 +325,4 @@ docker-info: ## Show Docker configuration
 	@echo "  Compose CLI Build: ${COMPOSE_DOCKER_CLI_BUILD}"
 	@echo ""
 	@echo "$(BLUE)Images:$(NC)"
-	@docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}" | grep -E "(dht|REPOSITORY)" || true
+	@docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}" | grep -E "(grime|REPOSITORY)" || true

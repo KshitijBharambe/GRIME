@@ -111,6 +111,13 @@ echo -e "${BLUE}Starting production simulation environment...${NC}"
 echo -e "${GREEN}✓ Services started${NC}"
 echo ""
 
+# Run migrations
+echo -e "${BLUE}Running database migrations...${NC}"
+./scripts/wait-for-db.sh grime-postgres admin data_hygiene
+"${COMPOSE_CMD[@]}" exec backend alembic -c migrations/alembic.ini upgrade head
+echo -e "${GREEN}✓ Migrations complete$(NC)"
+echo ""
+
 # Wait for services to be healthy
 echo -e "${BLUE}Waiting for services to be healthy...${NC}"
 echo -e "${YELLOW}This may take 30-60 seconds...${NC}"

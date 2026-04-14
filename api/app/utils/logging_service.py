@@ -1,5 +1,5 @@
 """
-Comprehensive logging service for the Data Hygiene Toolkit.
+Comprehensive logging service for GRIME.
 Provides structured logging, execution tracing, and performance monitoring.
 """
 

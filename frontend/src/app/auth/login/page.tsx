@@ -131,7 +131,7 @@ export default function LoginPage() {
                 DH
               </span>
             </div>
-            <h1 className="text-2xl font-bold">Data Hygiene Tool</h1>
+            <h1 className="text-2xl font-bold">GRIME</h1>
             <p className="mt-2 text-muted-foreground">
               Sign in to continue, or start with guest access
             </p>

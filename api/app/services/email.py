@@ -99,7 +99,7 @@ async def send_invite_email(
     html = f"""
     <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
         <h2>You've been invited to join {org_name}</h2>
-        <p>{inviter_name} has invited you to join <strong>{org_name}</strong> on Data Hygiene Toolkit.</p>
+        <p>{inviter_name} has invited you to join <strong>{org_name}</strong> on GRIME.</p>
         <p>
             <a href="{invite_url}"
                style="display: inline-block; background: #2563eb; color: white; padding: 12px 24px;

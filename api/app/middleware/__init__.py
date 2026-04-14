@@ -1,4 +1,4 @@
-"""Middleware package for the Data Hygiene Toolkit."""
+"""Middleware package for GRIME."""
 
 from app.middleware.organization import (
     OrganizationFilter,

@@ -14,6 +14,7 @@ from starlette.datastructures import UploadFile
 
 from app.auth import get_org_context, OrgContext
 from app.models import AccountType, UserRole, Organization, User
+from app.routes.auth.auth import guest_login
 from app.routes.upload.upload import (
     _get_upload_size_limit_bytes,
     _read_file_with_size_limit,
@@ -184,3 +185,22 @@ def test_non_guest_upload_limit_unchanged():
     )
 
     assert _get_upload_size_limit_bytes(org_context) == MAX_FILE_SIZE_BYTES
+
+
+def test_guest_login_response_is_not_cacheable():
+    fake_result = {
+        "user_id": "guest-user-1",
+        "email": "guest@example.com",
+        "organization_id": "guest-org-1",
+        "access_token": "token-1",
+        "expires_at": "2030-01-01T00:00:00+00:00",
+    }
+
+    with patch("app.routes.auth.auth.create_guest_session", return_value=fake_result):
+        response = asyncio.run(guest_login(db=SimpleNamespace()))
+
+    assert (
+        response.headers.get("Cache-Control") == "no-store, no-cache, must-revalidate"
+    )
+    assert response.headers.get("Pragma") == "no-cache"
+    assert response.headers.get("Expires") == "0"

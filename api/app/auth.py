@@ -26,6 +26,23 @@ if not SECRET_KEY:
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 
+# Patch passlib's bcrypt handler to skip legacy bug detection check and fix
+# version detection which fails with bcrypt 4.0+
+try:
+    import bcrypt
+    from passlib.handlers import bcrypt as bcrypt_handler
+
+    # bcrypt 4.0+ lacks __about__ module which passlib expects
+    if not hasattr(bcrypt, "__about__"):
+        bcrypt.__about__ = bcrypt
+
+    # This specifically targets the check that causes the ValueError: 
+    # "password cannot be longer than 72 bytes"
+    if hasattr(bcrypt_handler, "bcrypt"):
+        bcrypt_handler.bcrypt._detect_wrap_bug = lambda self, ident: False
+except (ImportError, AttributeError):
+    pass
+
 security = HTTPBearer()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 

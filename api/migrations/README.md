@@ -1,6 +1,6 @@
 # Migrations
 
-This directory contains Alembic database migrations for the Data Hygiene Toolkit.
+This directory contains Alembic database migrations for GRIME.
 
 ## Directory Structure
 

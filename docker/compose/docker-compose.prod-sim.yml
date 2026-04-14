@@ -1,11 +1,11 @@
 # ============================================================================
 # Docker Compose - Production Simulation Profile
-# Data Hygiene Toolkit
-# 
+# GRIME
+#
 # Usage: docker compose -f docker/compose/docker-compose.yml \
 #                       -f docker/compose/docker-compose.prod-sim.yml up --build
 # Or use: make prod-sim
-# 
+#
 # Features:
 # - Production build targets
 # - NO source code volumes (tests built images)
@@ -28,27 +28,27 @@ services:
       ENVIRONMENT: production
       LOG_LEVEL: info
       PYTHONOPTIMIZE: 2
-      
+
       # Connection pooling (production settings)
       DB_POOL_SIZE: 3
       DB_MAX_OVERFLOW: 5
       DB_POOL_TIMEOUT: 30
       DB_POOL_RECYCLE: 1800
       DB_POOL_PRE_PING: "true"
-    
+
     # NO volumes - test built image
     volumes: []
-    
+
     # Production-like resource limits (simulate Cloud Run)
     deploy:
       resources:
         limits:
-          cpus: '1.0'
+          cpus: "1.0"
           memory: 512M
         reservations:
-          cpus: '0.5'
+          cpus: "0.5"
           memory: 256M
-    
+
     # Production command (gunicorn with multiple workers)
     command: >
       gunicorn app.main:app
@@ -73,20 +73,20 @@ services:
     environment:
       NODE_ENV: production
       NODE_OPTIONS: "--max-old-space-size=512"
-    
+
     # NO volumes - test built image
     volumes: []
-    
+
     # Production-like resource limits (simulate Vercel)
     deploy:
       resources:
         limits:
-          cpus: '1.0'
+          cpus: "1.0"
           memory: 1G
         reservations:
-          cpus: '0.5'
+          cpus: "0.5"
           memory: 512M
-    
+
     # Production command (Next.js standalone server)
     command: ["node", "server.js"]
 
@@ -96,7 +96,7 @@ services:
   postgres:
     # Don't expose ports in prod-sim (only internal access)
     ports: []
-    
+
     # Production-like settings
     command: >
       postgres
@@ -112,14 +112,14 @@ services:
       -c work_mem=2621kB
       -c min_wal_size=1GB
       -c max_wal_size=4GB
-    
+
     deploy:
       resources:
         limits:
-          cpus: '1.0'
+          cpus: "1.0"
           memory: 1G
         reservations:
-          cpus: '0.5'
+          cpus: "0.5"
           memory: 512M
 
   # ==========================================================================
@@ -128,14 +128,14 @@ services:
   minio:
     # Don't expose MinIO ports to host in production (backend accesses via internal docker network)
     ports: []
-    
+
     deploy:
       resources:
         limits:
-          cpus: '0.5'
+          cpus: "0.5"
           memory: 512M
         reservations:
-          cpus: '0.25'
+          cpus: "0.25"
           memory: 256M
 
   # ==========================================================================
@@ -143,7 +143,7 @@ services:
   # ==========================================================================
   minio-init:
     profiles:
-      - donotstart  # Don't run in prod-sim
+      - donotstart # Don't run in prod-sim
 
 # ============================================================================
 # Networks - Production Simulation Configuration
@@ -152,7 +152,7 @@ networks:
   backend-network:
     # Internal network (simulate AWS private subnet)
     internal: true
-    
+
   frontend-network:
     # Public-facing network
     internal: false
@@ -167,12 +167,12 @@ x-logging: &production-logging
     max-file: "3"
     labels: "service,environment"
 
-services:
-  backend:
-    logging: *production-logging
-  frontend:
-    logging: *production-logging
-  postgres:
-    logging: *production-logging
-  minio:
-    logging: *production-logging
+# services:
+#   backend:
+#     logging: *production-logging
+#   frontend:
+#     logging: *production-logging
+#   postgres:
+#     logging: *production-logging
+#   minio:
+#     logging: *production-logging

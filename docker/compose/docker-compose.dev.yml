@@ -1,6 +1,6 @@
 # ============================================================================
 # Docker Compose - Development Profile
-# Data Hygiene Toolkit
+# GRIME
 #
 # Usage: docker compose -f docker/compose/docker-compose.yml \
 #                       -f docker/compose/docker-compose.dev.yml up

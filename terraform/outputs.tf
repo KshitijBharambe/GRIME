@@ -1,6 +1,6 @@
 # ============================================================================
 # Terraform Outputs
-# Data Hygiene Toolkit - GCP Infrastructure
+# GRIME - GCP Infrastructure
 # ============================================================================
 
 # Cloud Run Outputs

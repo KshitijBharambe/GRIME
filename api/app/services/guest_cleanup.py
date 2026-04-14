@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
@@ -11,6 +11,8 @@ from app.core.config import GUEST_CLEANUP_INTERVAL_SECONDS
 
 logger = logging.getLogger(__name__)
 
+GUEST_CLEANUP_GRACE_PERIOD = timedelta(minutes=5)
+
 
 def cleanup_expired_guests(db: Session) -> int:
     """Delete expired guest users and their sandbox organizations.
@@ -18,13 +20,14 @@ def cleanup_expired_guests(db: Session) -> int:
     Returns number of cleaned up sessions.
     """
     now = datetime.now(timezone.utc)
+    expiry_threshold = now - GUEST_CLEANUP_GRACE_PERIOD
 
     expired_users = (
         db.query(User)
         .filter(
             User.is_guest == True,
             User.guest_expires_at != None,
-            User.guest_expires_at < now,
+            User.guest_expires_at < expiry_threshold,
         )
         .all()
     )
@@ -96,6 +99,6 @@ async def guest_cleanup_loop(session_factory):
                 db.close()
         except asyncio.CancelledError:
             logger.info("Guest cleanup task cancelled")
-            break
+            raise
         except Exception:
             logger.exception("Error in guest cleanup loop")

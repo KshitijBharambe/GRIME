@@ -1,6 +1,6 @@
 # ============================================================================
 # Main Terraform Configuration
-# Data Hygiene Toolkit - GCP Infrastructure
+# GRIME - GCP Infrastructure
 # 
 # Orchestrates all modules to create complete infrastructure:
 # - VPC Networking

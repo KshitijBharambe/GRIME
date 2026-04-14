@@ -142,7 +142,7 @@ class ApiClient {
       code.includes("guest_expired") ||
       code.includes("guest-expired");
 
-    const isUnauthorized = status === 401 || status === 403;
+    const isUnauthorized = status === 401;
 
     if (!isUnauthorized && !indicatesGuestExpired) {
       return;

@@ -2,13 +2,76 @@ import type { NextConfig } from "next";
 import path from "node:path";
 
 const isDev = process.env.NODE_ENV !== "production";
+
+// Temporary-but-clean tunnel toggle for local development.
+// Set DEV_TUNNEL_HOST (example: "grime.kshitij.space") when developing via Cloudflare Tunnel.
+// Remove this block once tunnel access is no longer needed.
+const devTunnelHost = process.env.DEV_TUNNEL_HOST?.trim() ?? "";
+const devTunnelOrigin = devTunnelHost ? `https://${devTunnelHost}` : "";
+const isTunnelDev = isDev && devTunnelOrigin.length > 0;
+
+if (typeof process !== "undefined" && isDev) {
+  console.log("🛠️ [TUNNEL-DEBUG] isTunnelDev:", isTunnelDev);
+  console.log("🛠️ [TUNNEL-DEBUG] devTunnelHost:", devTunnelHost);
+  console.log("🛠️ [TUNNEL-DEBUG] NODE_ENV:", process.env.NODE_ENV);
+}
+
 const devConnectSources = isDev
-  ? " http://localhost:8000 http://127.0.0.1:8000"
+  ? [
+      "http://localhost:8000",
+      "http://127.0.0.1:8000",
+      ...(isTunnelDev
+        ? [
+            devTunnelOrigin,
+            `ws://${devTunnelHost}`,
+            `wss://${devTunnelHost}`,
+            "ws://localhost:3000",
+            "wss://localhost:3000",
+          ]
+        : []),
+    ].join(" ")
   : "";
+
+const cspScriptSources = [
+  "'self'",
+  "'unsafe-inline'",
+  "'unsafe-eval'",
+  "https://static.cloudflareinsights.com", // [TUNNEL-FIX] Always allow for debugging
+].join(" ");
+
+const cspConnectSources = [
+  "'self'",
+  "https:",
+  "ws:",
+  "wss:",
+  ...(devConnectSources ? [devConnectSources] : []),
+  "https://cloudflareinsights.com",
+].join(" ");
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  outputFileTracingRoot: path.join(__dirname, ".."),
+  // outputFileTracingRoot: path.join(__dirname, ".."),
+  // Required for external dev origins (Cloudflare Tunnel) so HMR handshakes are accepted.
+  // Remove when tunnel-based development is retired.
+  ...(isTunnelDev
+    ? {
+        allowedDevOrigins: [
+          devTunnelOrigin,
+          "https://grime.kshitij.space",
+          "grime.kshitij.space",
+        ],
+      }
+    : {}),
+  // [TUNNEL-FIX] Proxy API calls to the backend container to avoid CORS and multi-tunnel issues.
+  // This can be removed later if you use separate subdomains for API and Frontend.
+  async rewrites() {
+    return [
+      {
+        source: "/api-proxy/:path*",
+        destination: "http://backend:8000/:path*",
+      },
+    ];
+  },
   // Bundle optimization
   experimental: {
     optimizePackageImports: [
@@ -50,9 +113,11 @@ const nextConfig: NextConfig = {
             key: "Permissions-Policy",
             value: "camera=(), microphone=(), geolocation=()",
           },
+          // [TUNNEL-FIX] Temporarily relaxed CSP for debugging HMR/Tunnel issues.
+          // Restore to stricter version from implementation_plan when fixed.
           {
             key: "Content-Security-Policy",
-            value: `default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https: ws: wss:${devConnectSources}; font-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`,
+            value: `default-src 'self'; script-src ${cspScriptSources}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src *; font-src 'self' data: https:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`,
           },
         ],
       },

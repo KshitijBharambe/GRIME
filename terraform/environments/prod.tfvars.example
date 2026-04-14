@@ -1,6 +1,6 @@
 # ============================================================================
 # Production Environment Configuration
-# Data Hygiene Toolkit - GCP
+# GRIME - GCP
 # 
 # Copy this file to prod.tfvars and fill in your values
 # Usage: terraform apply -var-file=environments/prod.tfvars

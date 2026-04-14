@@ -273,10 +273,6 @@ END$$;
     op.create_index(
         op.f("ix_debug_sessions_id"), "debug_sessions", ["id"], unique=False
     )
-    op.drop_table("users_archived")
-    op.drop_index(op.f("ix_access_requests_org"), table_name="access_requests")
-    op.drop_index(op.f("ix_access_requests_requester"), table_name="access_requests")
-    op.drop_index(op.f("ix_access_requests_status"), table_name="access_requests")
     op.create_index(
         op.f("ix_access_requests_organization_id"),
         "access_requests",
@@ -289,7 +285,6 @@ END$$;
         ["requester_id"],
         unique=False,
     )
-    op.drop_index(op.f("idx_audit_logs_org_created"), table_name="audit_logs")
     op.alter_column(
         "data_quality_metrics",
         "dqi",
@@ -335,13 +330,6 @@ END$$;
         nullable=True,
         existing_server_default=sa.text("now()"),
     )
-    op.drop_index(
-        op.f("ix_data_quality_metrics_dataset_version_id"),
-        table_name="data_quality_metrics",
-    )
-    op.drop_index(
-        op.f("ix_data_quality_metrics_execution_id"), table_name="data_quality_metrics"
-    )
     op.create_index(
         op.f("ix_data_quality_metrics_id"), "data_quality_metrics", ["id"], unique=False
     )
@@ -354,10 +342,6 @@ END$$;
         existing_nullable=True,
         existing_server_default=sa.text("now()"),
     )
-    op.drop_index(
-        op.f("ix_dataset_versions_parent_version_id"), table_name="dataset_versions"
-    )
-    op.drop_index(op.f("ix_dataset_versions_source"), table_name="dataset_versions")
     op.alter_column(
         "datasets", "organization_id", existing_type=sa.VARCHAR(), nullable=False
     )
@@ -369,7 +353,6 @@ END$$;
         existing_nullable=True,
         existing_server_default=sa.text("now()"),
     )
-    op.drop_index(op.f("idx_datasets_org_uploaded"), table_name="datasets")
     op.drop_index(op.f("ix_datasets_compartment_id"), table_name="datasets")
     op.drop_constraint(
         op.f("datasets_compartment_id_fkey"), "datasets", type_="foreignkey"
@@ -390,8 +373,6 @@ END$$;
         type_=postgresql.TIMESTAMP(timezone=True),
         existing_nullable=True,
     )
-    op.drop_index(op.f("idx_executions_version_status"), table_name="executions")
-    op.drop_index(op.f("ix_executions_compartment_id"), table_name="executions")
     op.drop_constraint(
         op.f("executions_compartment_id_fkey"), "executions", type_="foreignkey"
     )
@@ -412,8 +393,6 @@ END$$;
         existing_nullable=True,
         existing_server_default=sa.text("now()"),
     )
-    op.drop_index(op.f("ix_fixes_applied_in_version_id"), table_name="fixes")
-    op.drop_index(op.f("idx_guest_usage_org"), table_name="guest_usage")
     op.alter_column(
         "issues",
         "created_at",
@@ -422,7 +401,6 @@ END$$;
         existing_nullable=True,
         existing_server_default=sa.text("now()"),
     )
-    op.drop_index(op.f("idx_issues_execution_resolved"), table_name="issues")
     op.alter_column(
         "rules", "organization_id", existing_type=sa.VARCHAR(), nullable=False
     )
@@ -442,23 +420,12 @@ END$$;
         existing_nullable=True,
         existing_server_default=sa.text("now()"),
     )
-    op.drop_index(op.f("idx_rules_org_active"), table_name="rules")
-    op.drop_index(op.f("ix_rules_compartment_id"), table_name="rules")
-    op.drop_index(op.f("ix_rules_dependency_group"), table_name="rules")
-    op.drop_index(op.f("ix_rules_execution_order"), table_name="rules")
-    op.drop_index(
-        op.f("ix_rules_name_is_latest_unique"),
-        table_name="rules",
-        postgresql_where="(is_latest = true)",
-    )
-    op.drop_index(op.f("ix_rules_priority"), table_name="rules")
     op.drop_constraint(op.f("fk_rules_rule_family_id"), "rules", type_="foreignkey")
     op.drop_constraint(op.f("rules_compartment_id_fkey"), "rules", type_="foreignkey")
     op.drop_constraint(op.f("fk_rules_parent_rule_id"), "rules", type_="foreignkey")
     op.create_foreign_key(None, "rules", "rules", ["parent_rule_id"], ["id"])
     op.create_foreign_key(None, "rules", "rules", ["rule_family_id"], ["id"])
     op.drop_column("rules", "compartment_id")
-    op.drop_index(op.f("idx_users_guest_expires"), table_name="users")
     op.alter_column(
         "version_journal",
         "occurred_at",
@@ -516,29 +483,6 @@ def downgrade() -> None:
         ["id"],
         ondelete="SET NULL",
     )
-    op.create_index(op.f("ix_rules_priority"), "rules", ["priority"], unique=False)
-    op.create_index(
-        op.f("ix_rules_name_is_latest_unique"),
-        "rules",
-        ["name"],
-        unique=True,
-        postgresql_where="(is_latest = true)",
-    )
-    op.create_index(
-        op.f("ix_rules_execution_order"), "rules", ["execution_order"], unique=False
-    )
-    op.create_index(
-        op.f("ix_rules_dependency_group"), "rules", ["dependency_group"], unique=False
-    )
-    op.create_index(
-        op.f("ix_rules_compartment_id"), "rules", ["compartment_id"], unique=False
-    )
-    op.create_index(
-        op.f("idx_rules_org_active"),
-        "rules",
-        ["organization_id", "is_active"],
-        unique=False,
-    )
     op.alter_column(
         "rules",
         "updated_at",
@@ -558,12 +502,6 @@ def downgrade() -> None:
     op.alter_column(
         "rules", "organization_id", existing_type=sa.VARCHAR(), nullable=True
     )
-    op.create_index(
-        op.f("idx_issues_execution_resolved"),
-        "issues",
-        ["execution_id", "resolved"],
-        unique=False,
-    )
     op.alter_column(
         "issues",
         "created_at",
@@ -571,15 +509,6 @@ def downgrade() -> None:
         type_=postgresql.TIMESTAMP(),
         existing_nullable=True,
         existing_server_default=sa.text("now()"),
-    )
-    op.create_index(
-        op.f("idx_guest_usage_org"), "guest_usage", ["organization_id"], unique=False
-    )
-    op.create_index(
-        op.f("ix_fixes_applied_in_version_id"),
-        "fixes",
-        ["applied_in_version_id"],
-        unique=False,
     )
     op.alter_column(
         "fixes",
@@ -609,18 +538,6 @@ def downgrade() -> None:
         ["id"],
         ondelete="SET NULL",
     )
-    op.create_index(
-        op.f("ix_executions_compartment_id"),
-        "executions",
-        ["compartment_id"],
-        unique=False,
-    )
-    op.create_index(
-        op.f("idx_executions_version_status"),
-        "executions",
-        ["dataset_version_id", "status"],
-        unique=False,
-    )
     op.alter_column(
         "executions",
         "finished_at",
@@ -648,15 +565,6 @@ def downgrade() -> None:
         ["id"],
         ondelete="SET NULL",
     )
-    op.create_index(
-        op.f("ix_datasets_compartment_id"), "datasets", ["compartment_id"], unique=False
-    )
-    op.create_index(
-        op.f("idx_datasets_org_uploaded"),
-        "datasets",
-        ["organization_id", "uploaded_at"],
-        unique=False,
-    )
     op.alter_column(
         "datasets",
         "uploaded_at",
@@ -667,15 +575,6 @@ def downgrade() -> None:
     )
     op.alter_column(
         "datasets", "organization_id", existing_type=sa.VARCHAR(), nullable=True
-    )
-    op.create_index(
-        op.f("ix_dataset_versions_source"), "dataset_versions", ["source"], unique=False
-    )
-    op.create_index(
-        op.f("ix_dataset_versions_parent_version_id"),
-        "dataset_versions",
-        ["parent_version_id"],
-        unique=False,
     )
     op.alter_column(
         "dataset_versions",
@@ -692,12 +591,6 @@ def downgrade() -> None:
         "data_quality_metrics",
         ["execution_id"],
         unique=True,
-    )
-    op.create_index(
-        op.f("ix_data_quality_metrics_dataset_version_id"),
-        "data_quality_metrics",
-        ["dataset_version_id"],
-        unique=False,
     )
     op.alter_column(
         "data_quality_metrics",
@@ -744,12 +637,6 @@ def downgrade() -> None:
         existing_nullable=False,
         existing_server_default=sa.text("'0'::double precision"),
     )
-    op.create_index(
-        op.f("idx_audit_logs_org_created"),
-        "audit_logs",
-        ["organization_id", "created_at"],
-        unique=False,
-    )
     op.drop_index(op.f("ix_access_requests_requester_id"), table_name="access_requests")
     op.drop_index(
         op.f("ix_access_requests_organization_id"), table_name="access_requests"
@@ -762,54 +649,6 @@ def downgrade() -> None:
         "access_requests",
         ["requester_id"],
         unique=False,
-    )
-    op.create_index(
-        op.f("ix_access_requests_org"),
-        "access_requests",
-        ["organization_id"],
-        unique=False,
-    )
-    op.create_table(
-        "users_archived",
-        sa.Column("id", sa.VARCHAR(), autoincrement=False, nullable=False),
-        sa.Column("name", sa.VARCHAR(), autoincrement=False, nullable=False),
-        sa.Column("email", sa.VARCHAR(), autoincrement=False, nullable=False),
-        sa.Column(
-            "role",
-            postgresql.ENUM(
-                "admin",
-                "analyst",
-                "viewer",
-                "owner",
-                name="userrole",
-                create_type=False,
-            ),
-            autoincrement=False,
-            nullable=False,
-        ),
-        sa.Column("auth_provider", sa.VARCHAR(), autoincrement=False, nullable=True),
-        sa.Column("auth_subject", sa.VARCHAR(), autoincrement=False, nullable=True),
-        sa.Column(
-            "created_at",
-            postgresql.TIMESTAMP(),
-            server_default=sa.text("now()"),
-            autoincrement=False,
-            nullable=True,
-        ),
-        sa.Column(
-            "updated_at",
-            postgresql.TIMESTAMP(),
-            server_default=sa.text("now()"),
-            autoincrement=False,
-            nullable=True,
-        ),
-        sa.PrimaryKeyConstraint("id", name=op.f("users_pkey")),
-        sa.UniqueConstraint(
-            "email",
-            name=op.f("users_email_key"),
-            postgresql_include=[],
-            postgresql_nulls_not_distinct=False,
-        ),
     )
     op.drop_index(op.f("ix_debug_sessions_id"), table_name="debug_sessions")
     op.drop_table("debug_sessions")
