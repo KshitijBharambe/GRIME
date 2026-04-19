@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "production"
     DEBUG: bool = False
     APP_NAME: str = "GRIME"
+    PUBLIC_SIGNUP_ENABLED: bool = False
 
     # CORS — comma-separated origins
     CORS_ORIGINS: str = (
@@ -97,6 +98,7 @@ class DatabaseTableRefs:
     DATASET_VERSIONS_ID = "dataset_versions.id"
     EXECUTIONS_ID = "executions.id"
     RULES_ID = "rules.id"
+    DATA_SOURCES_ID = "data_sources.id"
 
 
 # ---------------------------------------------------------------------------
@@ -195,10 +197,10 @@ RATE_LIMIT_WINDOW_SECONDS = 60
 # ---------------------------------------------------------------------------
 # Guest Limits
 # ---------------------------------------------------------------------------
-GUEST_SESSION_TTL_HOURS = 1
-GUEST_UPLOAD_LIMIT = 3
-GUEST_EXECUTION_LIMIT = 5
-GUEST_MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
+GUEST_SESSION_TTL_HOURS = 24
+GUEST_UPLOAD_LIMIT = 10
+GUEST_EXECUTION_LIMIT = 50
+GUEST_MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024  # 20 MB
 GUEST_CLEANUP_INTERVAL_SECONDS = 900  # 15 minutes
 
 # ---------------------------------------------------------------------------

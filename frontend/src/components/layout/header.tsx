@@ -349,11 +349,11 @@ export function Header({ onMenuClick }: Readonly<HeaderProps>) {
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-sm font-semibold text-primary"
               style={{ boxShadow: "var(--shadow-flat)" }}
             >
-              DF
+              GR
             </div>
             <div className="hidden min-w-0 md:block">
               <span className="block truncate text-sm font-semibold tracking-[0.18em] text-foreground">
-                DATAFORGE
+                GRIME
               </span>
               <span className="block text-xs text-muted-foreground">
                 Control plane

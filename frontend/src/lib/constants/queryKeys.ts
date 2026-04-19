@@ -59,4 +59,10 @@ export const QUERY_KEYS = {
 
   // Current user
   currentUser: ["currentUser"] as const,
+
+  // Data Sources
+  dataSources: ["data-sources"] as const,
+  dataSource: (id: string) => ["data-source", id] as const,
+  dataSourceCatalog: (sourceId: string) => ["data-source", sourceId, "catalog"] as const,
+  dataCatalogAll: ["data-catalog-all"] as const,
 } as const;

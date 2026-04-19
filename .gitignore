@@ -59,5 +59,6 @@ repomix-output.xml
 .env.keys
 .env.local
 .env.*.local
-docs/
 tests/test_data
+
+docs/

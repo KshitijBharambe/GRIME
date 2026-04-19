@@ -13,7 +13,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { UnderTestingState } from "@/components/under-testing-state";
 import {
   Bug,
   Play,
@@ -48,7 +47,6 @@ interface TestScenario {
 }
 
 export default function DebugToolsPage() {
-  const isUnderTesting = true;
   if (process.env.NODE_ENV === "production") {
     notFound();
   }
@@ -180,13 +178,11 @@ export default function DebugToolsPage() {
               Advanced debugging and testing capabilities for data quality rules
             </p>
           </div>
-          <Button disabled={isUnderTesting}>
+          <Button>
             <Settings className="h-4 w-4 mr-2" />
             Settings
           </Button>
         </div>
-
-        <UnderTestingState featureName="Debug tools" />
 
         <Tabs defaultValue="sessions" className="space-y-6">
           <TabsList>
@@ -243,8 +239,7 @@ export default function DebugToolsPage() {
                     <Button
                       className="w-full mt-4"
                       onClick={() => createDebugSession("sample_execution")}
-                      disabled={isUnderTesting}
-                    >
+                                         >
                       <Play className="h-4 w-4 mr-2" />
                       New Debug Session
                     </Button>
@@ -262,24 +257,21 @@ export default function DebugToolsPage() {
                           <Button
                             variant="outline"
                             size="sm"
-                            disabled={isUnderTesting}
-                          >
+                                                     >
                             <Pause className="h-4 w-4 mr-2" />
                             Pause
                           </Button>
                           <Button
                             variant="outline"
                             size="sm"
-                            disabled={isUnderTesting}
-                          >
+                                                     >
                             <Square className="h-4 w-4 mr-2" />
                             Stop
                           </Button>
                           <Button
                             variant="outline"
                             size="sm"
-                            disabled={isUnderTesting}
-                          >
+                                                     >
                             <RefreshCw className="h-4 w-4 mr-2" />
                             Refresh
                           </Button>
@@ -307,8 +299,7 @@ export default function DebugToolsPage() {
                             <Button
                               variant="outline"
                               size="sm"
-                              disabled={isUnderTesting}
-                            >
+                                                         >
                               Add Breakpoint
                             </Button>
                           </div>
@@ -323,8 +314,7 @@ export default function DebugToolsPage() {
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    disabled={isUnderTesting}
-                                  >
+                                                                     >
                                     <EyeOff className="h-4 w-4" />
                                   </Button>
                                 </div>
@@ -428,7 +418,7 @@ export default function DebugToolsPage() {
                         <Button
                           size="sm"
                           onClick={() => generateTestData(scenario.id)}
-                          disabled={isGeneratingTestData || isUnderTesting}
+                          disabled={isGeneratingTestData}
                         >
                           <Zap className="h-4 w-4 mr-2" />
                           Generate Data
@@ -474,7 +464,7 @@ export default function DebugToolsPage() {
                         placeholder="Configure columns and their properties..."
                       />
                     </div>
-                    <Button className="w-full" disabled={isUnderTesting}>
+                    <Button className="w-full">
                       <Download className="h-4 w-4 mr-2" />
                       Generate Custom Data
                     </Button>

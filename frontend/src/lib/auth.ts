@@ -73,11 +73,19 @@ export default NextAuth({
     CredentialsProvider({
       id: "guest",
       name: "Guest",
-      credentials: {},
-      async authorize() {
+      credentials: {
+        guest_browser_id: { type: "text" },
+      },
+      async authorize(credentials) {
         try {
+          const body: Record<string, string> = {};
+          if (credentials?.guest_browser_id) {
+            body.guest_browser_id = credentials.guest_browser_id;
+          }
           const res = await fetch(`${getApiUrl()}/auth/guest-login`, {
             method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
           });
           if (!res.ok) return null;
           const data = await res.json();
@@ -161,6 +169,6 @@ export default NextAuth({
   },
   session: {
     strategy: "jwt",
-    maxAge: 8 * 60 * 60, // 8 hours
+    maxAge: 24 * 60 * 60, // 24 hours
   },
 });

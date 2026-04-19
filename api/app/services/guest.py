@@ -1,6 +1,8 @@
 import uuid
+import hashlib
 import logging
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 from sqlalchemy.orm import Session
 
@@ -24,11 +26,55 @@ from app.core.config import (
 logger = logging.getLogger(__name__)
 
 
-def create_guest_session(db: Session) -> dict:
+def _make_browser_key(guest_browser_id: str, user_agent_family: str) -> str:
+    return hashlib.sha256(
+        f"{guest_browser_id}:{user_agent_family}".encode()
+    ).hexdigest()
+
+
+def create_guest_session(
+    db: Session,
+    guest_browser_id: Optional[str] = None,
+    user_agent_family: Optional[str] = None,
+) -> dict:
     """Create a temporary guest user with a sandbox organization.
 
     Returns dict with user_id, email, organization_id, access_token, expires_at.
     """
+    browser_key = (
+        _make_browser_key(guest_browser_id, user_agent_family or "unknown")
+        if guest_browser_id
+        else None
+    )
+
+    # Re-use existing non-expired guest session for same browser
+    if browser_key:
+        existing_usage = (
+            db.query(GuestUsage)
+            .filter(GuestUsage.browser_key == browser_key)
+            .first()
+        )
+        if existing_usage:
+            user = db.query(User).filter(User.id == existing_usage.user_id).first()
+            if user and user.guest_expires_at and user.guest_expires_at > datetime.now(timezone.utc):
+                token = create_access_token(
+                    user_id=user.id,
+                    email=user.email,
+                    organization_id=existing_usage.organization_id,
+                    role=UserRole.admin,
+                    account_type=AccountType.GUEST.value,
+                )
+                logger.info(
+                    f"Resumed guest session for {redact_email(user.email)} via browser_key"
+                )
+                return {
+                    "user_id": user.id,
+                    "email": user.email,
+                    "organization_id": existing_usage.organization_id,
+                    "access_token": token,
+                    "expires_at": user.guest_expires_at.isoformat(),
+                }
+
     guest_id = str(uuid.uuid4())
     short_id = guest_id[:8]
     guest_email = f"guest-{short_id}@example.com"
@@ -74,6 +120,7 @@ def create_guest_session(db: Session) -> dict:
         id=str(uuid.uuid4()),
         user_id=user.id,
         organization_id=org.id,
+        browser_key=browser_key,
     )
     db.add(usage)
 

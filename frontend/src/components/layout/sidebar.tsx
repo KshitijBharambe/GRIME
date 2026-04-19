@@ -52,6 +52,7 @@ interface NavItem {
   readonly children?: readonly NavItem[];
   readonly roles?: readonly string[];
   readonly guestRestricted?: boolean;
+  readonly underTesting?: boolean;
 }
 
 // Helper function to check if a menu item has an active child or grandchild
@@ -100,7 +101,7 @@ function getNavigationItems(
         },
         {
           title: "Data Sources",
-          href: "/connectors",
+          href: "/data-sources",
           icon: Database,
         },
         {
@@ -281,13 +282,20 @@ function NavItemComponent({
       child.children?.some((grandchild) => grandchild.href === pathname),
   );
 
+  const isGuestUser = session?.user?.accountType === "guest";
+
   // Check if user has permission to see this item - after hooks
   if (item.roles && !item.roles.includes(session?.user?.role || "")) {
     return null;
   }
 
   // Hide guest-restricted items for guest users
-  if (item.guestRestricted && session?.user?.accountType === "guest") {
+  if (item.guestRestricted && isGuestUser) {
+    return null;
+  }
+
+  // Hide under-testing items for guest users; non-guests see a "Beta" badge
+  if (item.underTesting && isGuestUser) {
     return null;
   }
 
@@ -343,6 +351,11 @@ function NavItemComponent({
             )}
           >
             {item.badge}
+          </span>
+        )}
+        {item.underTesting && (
+          <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[0.6rem] font-mono font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+            Beta
           </span>
         )}
         {item.children && (
@@ -485,7 +498,8 @@ export function Sidebar({ isOpen, onClose }: Readonly<SidebarProps>) {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed left-0 top-16 z-30 h-[calc(100vh-4rem)] w-64 transition-transform duration-200 ease-in-out",
+          "fixed left-0 top-16 z-30 h-[calc(100vh-4rem)] w-64",
+          mounted && "transition-transform duration-200 ease-in-out",
           "bg-[var(--sidebar)] text-[var(--sidebar-foreground)] border-r border-[var(--sidebar-border)]",
           isOpen ? "translate-x-0" : "-translate-x-full",
         )}
@@ -508,16 +522,37 @@ export function Sidebar({ isOpen, onClose }: Readonly<SidebarProps>) {
 
           <div className="flex-1 overflow-y-auto px-3 py-4">
             <nav className="space-y-2">
-              {navigationItems.map((item) => (
-                <NavItemComponent
-                  key={item.title}
-                  item={item}
-                  isExpanded={expandedItems[item.title] || false}
-                  onToggleExpanded={() => toggleExpanded(item.title)}
-                  navigatingTo={navigatingTo}
-                  onNavigate={setNavigatingTo}
-                />
-              ))}
+              {!mounted ? (
+                navigationItems.map((item) => (
+                  <div key={item.title} className="space-y-1">
+                    {item.section && (
+                      <div className="px-3 pb-2 pt-3 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-[var(--muted-foreground)] first:pt-0">
+                        {item.section}
+                      </div>
+                    )}
+                    <div className="group flex items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-[var(--sidebar-foreground)]">
+                      <item.icon className="h-4 w-4 shrink-0 text-[var(--muted-foreground)]" />
+                      <span className="flex-1 text-sm font-medium truncate">{item.title}</span>
+                      {item.children && (
+                        <div className="opacity-60">
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                navigationItems.map((item) => (
+                  <NavItemComponent
+                    key={item.title}
+                    item={item}
+                    isExpanded={expandedItems[item.title] || false}
+                    onToggleExpanded={() => toggleExpanded(item.title)}
+                    navigatingTo={navigatingTo}
+                    onNavigate={setNavigatingTo}
+                  />
+                ))
+              )}
             </nav>
           </div>
 

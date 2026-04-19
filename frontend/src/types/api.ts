@@ -505,3 +505,73 @@ export interface PersonalRegisterResponse {
   access_token: string;
   token_type: string;
 }
+
+// Data Source types
+
+export type DataSourceType = "postgresql" | "mysql" | "snowflake" | "s3_csv" | "local_simulator";
+export type DataSourceStatus = "active" | "inactive" | "error";
+
+export interface DataSource {
+  id: string;
+  organization_id: string;
+  name: string;
+  source_type: DataSourceType;
+  status: DataSourceStatus;
+  last_synced_at?: string;
+  last_error?: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DataSourceCreate {
+  name: string;
+  source_type: DataSourceType;
+  connection_params: Record<string, unknown>;
+}
+
+export interface DataSourceUpdate {
+  name?: string;
+  connection_params?: Record<string, unknown>;
+}
+
+export interface DataSourceTestResult {
+  success: boolean;
+  message: string;
+  latency_ms?: number;
+}
+
+export interface CatalogColumnMeta {
+  name: string;
+  type: string;
+  nullable: boolean;
+}
+
+export interface DataCatalogEntry {
+  id: string;
+  organization_id: string;
+  data_source_id: string;
+  schema_name?: string;
+  table_name: string;
+  column_count?: number;
+  row_estimate?: number;
+  column_metadata?: CatalogColumnMeta[];
+  tags?: string[];
+  description?: string;
+  discovered_at: string;
+  updated_at: string;
+}
+
+export interface CatalogImportRequest {
+  catalog_entry_id: string;
+  dataset_name?: string;
+  row_limit?: number;
+}
+
+export interface CatalogImportResult {
+  dataset_id: string;
+  dataset_version_id: string;
+  dataset_name: string;
+  rows: number;
+  columns: number;
+}

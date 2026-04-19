@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 import uuid
 import secrets
 
@@ -30,6 +31,7 @@ from app.schemas import (
     OrganizationUpdate,
     PersonalRegisterRequest,
     PersonalRegisterResponse,
+    GuestLoginRequest,
     GuestLoginResponse,
 )
 from app.services.guest import create_guest_session
@@ -48,6 +50,7 @@ from app.auth import (
 
 import logging
 
+from app.core.config import settings
 from app.utils.pii import redact_email, hash_email
 
 logger = logging.getLogger(__name__)
@@ -65,6 +68,11 @@ async def register_organization(
     Register a new organization with an owner account.
     This creates both the organization and the first owner user.
     """
+    if not settings.PUBLIC_SIGNUP_ENABLED:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "signup_disabled", "message": "Signup is currently closed. Join the waitlist."},
+        )
     # Validate slug format (alphanumeric and hyphens only)
     if not org_data.slug.replace("-", "").isalnum():
         raise HTTPException(
@@ -706,9 +714,17 @@ async def remove_member(
 
 
 @router.post("/guest-login", response_model=GuestLoginResponse)
-async def guest_login(db: Session = Depends(get_session)):
+async def guest_login(
+    body: Optional[GuestLoginRequest] = None,
+    db: Session = Depends(get_session),
+):
     """Create a temporary guest session with a sandbox organization."""
-    result = create_guest_session(db)
+    payload = body or GuestLoginRequest()
+    result = create_guest_session(
+        db,
+        guest_browser_id=payload.guest_browser_id,
+        user_agent_family=payload.user_agent_family,
+    )
     response = GuestLoginResponse(
         user_id=result["user_id"],
         email=result["email"],
@@ -734,6 +750,11 @@ async def register_personal(
     Register a personal workspace account.
     Creates a user, a personal organization, and links them.
     """
+    if not settings.PUBLIC_SIGNUP_ENABLED:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "signup_disabled", "message": "Signup is currently closed. Join the waitlist."},
+        )
     # Check if email already exists
     existing_user = db.query(User).filter(User.email == data.email).first()
     if existing_user:

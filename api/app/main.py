@@ -14,6 +14,7 @@ from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.request_body_limit import RequestBodyLimitMiddleware
 from app.routes.upload import upload
 from app.routes.auth import auth
+from app.services.rule_templates import RuleTemplateService
 from app.routes import rules
 from app.routes import executions
 from app.routes import processing
@@ -23,6 +24,8 @@ from app.routes import search
 from app.routes import advanced_features
 from app.routes import compartments
 from app.routes import access_requests
+from app.routes import data_sources
+from app.routes import ai as ai_routes
 from app.services.guest_cleanup import guest_cleanup_loop
 from app.security.sandbox import validate_sandbox_config
 
@@ -58,6 +61,16 @@ async def lifespan(app: FastAPI):
     except RuntimeError as e:
         logger.critical("Sandbox configuration validation failed: %s", e)
         raise
+
+    # Seed default rule templates if none exist
+    try:
+        with SessionLocal() as db:
+            template_service = RuleTemplateService(db)
+            if not template_service.get_templates(active_only=False):
+                template_service.initialize_default_templates(user_id="system")
+                logger.info("Seeded default rule templates")
+    except Exception as e:
+        logger.warning("Failed to seed rule templates: %s", e)
 
     cleanup_task = asyncio.create_task(guest_cleanup_loop(SessionLocal))
     logger.info("Started guest cleanup background task")
@@ -134,6 +147,8 @@ app.include_router(search.router)
 app.include_router(advanced_features.router)
 app.include_router(compartments.router)
 app.include_router(access_requests.router)
+app.include_router(data_sources.router)
+app.include_router(ai_routes.router)
 
 
 @app.get("/")

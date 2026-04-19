@@ -40,6 +40,20 @@ class SourceType(enum.Enum):
     other = "other"
 
 
+class DataSourceType(str, enum.Enum):
+    postgresql = "postgresql"
+    mysql = "mysql"
+    snowflake = "snowflake"
+    s3_csv = "s3_csv"
+    local_simulator = "local_simulator"
+
+
+class DataSourceStatus(str, enum.Enum):
+    active = "active"
+    inactive = "inactive"
+    error = "error"
+
+
 class DatasetStatus(enum.Enum):
     uploaded = "uploaded"
     profiled = "profiled"
@@ -311,6 +325,7 @@ class GuestUsage(Base):
     total_file_size_bytes = Column(
         BigInteger, default=0, nullable=False, server_default="0"
     )
+    browser_key = Column(String, nullable=True, index=True, unique=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(
         TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -868,3 +883,67 @@ class CompartmentMember(Base):
     compartment = relationship("Compartment", back_populates="members")
     user = relationship("User", foreign_keys=[user_id])
     adder = relationship("User", foreign_keys=[added_by])
+
+
+class DataSource(Base):
+    __tablename__ = "data_sources"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
+    organization_id = Column(
+        String,
+        ForeignKey(DatabaseTableRefs.ORGANIZATIONS_ID, ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name = Column(String, nullable=False)
+    source_type = Column(
+        SAEnum(DataSourceType, name="datasourcetype", values_callable=lambda o: [e.value for e in o]),
+        nullable=False,
+    )
+    status = Column(
+        SAEnum(DataSourceStatus, name="datasourcestatus", values_callable=lambda o: [e.value for e in o]),
+        nullable=False,
+        default=DataSourceStatus.active,
+    )
+    connection_params = Column(Text, nullable=False)  # JSON, credentials excluded from responses
+    last_synced_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    last_error = Column(Text, nullable=True)
+    created_by = Column(String, ForeignKey(DatabaseTableRefs.USERS_ID), nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    organization = relationship("Organization")
+    creator = relationship("User", foreign_keys=[created_by])
+    catalog_entries = relationship("DataCatalogEntry", back_populates="data_source", cascade="all, delete-orphan")
+
+
+class DataCatalogEntry(Base):
+    __tablename__ = "data_catalog_entries"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
+    organization_id = Column(
+        String,
+        ForeignKey(DatabaseTableRefs.ORGANIZATIONS_ID, ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    data_source_id = Column(
+        String,
+        ForeignKey("data_sources.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    schema_name = Column(String, nullable=True)
+    table_name = Column(String, nullable=False)
+    column_count = Column(Integer, nullable=True)
+    row_estimate = Column(BigInteger, nullable=True)
+    column_metadata = Column(Text, nullable=True)  # JSON array of {name, type, nullable}
+    tags = Column(Text, nullable=True)  # JSON array of tag strings
+    description = Column(Text, nullable=True)
+    discovered_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    data_source = relationship("DataSource", back_populates="catalog_entries")
+    organization = relationship("Organization")

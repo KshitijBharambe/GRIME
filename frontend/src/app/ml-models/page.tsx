@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
 import { MainLayout } from "@/components/layout/main-layout";
 import apiClient from "@/lib/api";
 import { useAuthenticatedApi } from "@/lib/hooks/useAuthenticatedApi";
@@ -48,7 +49,6 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { UnderTestingState } from "@/components/under-testing-state";
 import type { Dataset, DatasetVersion } from "@/types/api";
 
 interface MLModel {
@@ -91,7 +91,8 @@ function getHttpStatus(error: unknown): number | undefined {
 }
 
 export default function MLModelsPage() {
-  const isUnderTesting = true;
+  const { data: session } = useSession();
+  const isGuest = session?.user?.accountType === "guest";
   const { hasToken } = useAuthenticatedApi();
   const [models, setModels] = useState<MLModel[]>([]);
   const [anomalyScores] = useState<AnomalyScore[]>([]);
@@ -257,14 +258,12 @@ export default function MLModelsPage() {
           </div>
           <Button
             onClick={() => setIsCreateDialogOpen(true)}
-            disabled={datasets.length === 0 || isUnderTesting}
+            disabled={datasets.length === 0 || isGuest}
           >
             <Plus className="mr-2 h-4 w-4" />
             Train New Model
           </Button>
         </div>
-
-        <UnderTestingState featureName="ML models and anomaly detection" />
 
         {datasets.length === 0 && (
           <Alert>
@@ -317,7 +316,7 @@ export default function MLModelsPage() {
                   </p>
                   <Button
                     onClick={() => setIsCreateDialogOpen(true)}
-                    disabled={datasets.length === 0 || isUnderTesting}
+                    disabled={datasets.length === 0 || isGuest}
                   >
                     <Plus className="mr-2 h-4 w-4" />
                     Train Model
@@ -456,7 +455,7 @@ export default function MLModelsPage() {
                           onClick={() =>
                             toggleModelStatus(model.id, model.is_active)
                           }
-                          disabled={isUnderTesting}
+                          disabled={isGuest}
                         >
                           {model.is_active ? "Deactivate" : "Activate"}
                         </Button>
@@ -464,7 +463,7 @@ export default function MLModelsPage() {
                           variant="destructive"
                           size="sm"
                           onClick={() => deleteModel(model.id)}
-                          disabled={isUnderTesting}
+                          disabled={isGuest}
                         >
                           <Trash2 className="mr-2 h-4 w-4" />
                           Delete
@@ -530,7 +529,7 @@ export default function MLModelsPage() {
                     {anomalyScores.length !== 1 ? "s" : ""} for{" "}
                     {selectedModel.name}
                   </p>
-                  <Button variant="outline" size="sm" disabled={isUnderTesting}>
+                  <Button variant="outline" size="sm" disabled={isGuest}>
                     <Download className="mr-2 h-4 w-4" />
                     Export
                   </Button>
@@ -597,7 +596,7 @@ export default function MLModelsPage() {
                       variant="outline"
                       size="sm"
                       className="mt-2"
-                      disabled={isUnderTesting}
+                      disabled={isGuest}
                     >
                       Load More
                     </Button>
@@ -746,12 +745,6 @@ export default function MLModelsPage() {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                if (isUnderTesting) {
-                  toast.info(
-                    "ML model training is under testing and will be available soon.",
-                  );
-                  return;
-                }
                 const formData = new FormData(e.currentTarget);
                 const trainingData = {
                   model_name: formData.get("model_name") as string,
@@ -900,7 +893,7 @@ export default function MLModelsPage() {
                   </Button>
                   <Button
                     type="submit"
-                    disabled={trainingInProgress || isUnderTesting}
+                    disabled={trainingInProgress || isGuest}
                     className="flex-1"
                   >
                     {trainingInProgress ? (

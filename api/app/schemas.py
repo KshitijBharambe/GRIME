@@ -17,6 +17,8 @@ from app.models import (
     SharePermission,
     InviteStatus,
     AccountType,
+    DataSourceType,
+    DataSourceStatus,
 )
 
 # Base schemas
@@ -171,6 +173,11 @@ class PersonalRegisterResponse(BaseModel):
     organization_id: str
     access_token: str
     token_type: str = "bearer"
+
+
+class GuestLoginRequest(BaseModel):
+    guest_browser_id: Optional[str] = None
+    user_agent_family: Optional[str] = None
 
 
 class GuestLoginResponse(BaseModel):
@@ -541,3 +548,68 @@ class QualityMetricsResponse(BaseModel):
     message: Optional[str] = None
     computed_at: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
+
+
+# Data Source schemas
+
+
+class DataSourceCreate(BaseModel):
+    name: str
+    source_type: DataSourceType
+    connection_params: dict  # validated per connector type
+
+
+class DataSourceUpdate(BaseModel):
+    name: Optional[str] = None
+    connection_params: Optional[dict] = None
+
+
+class DataSourceResponse(BaseModel):
+    id: str
+    organization_id: str
+    name: str
+    source_type: DataSourceType
+    status: DataSourceStatus
+    last_synced_at: Optional[datetime] = None
+    last_error: Optional[str] = None
+    created_by: str
+    created_at: datetime
+    updated_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DataSourceTestResult(BaseModel):
+    success: bool
+    message: str
+    latency_ms: Optional[float] = None
+
+
+# Data Catalog schemas
+
+
+class CatalogColumnMeta(BaseModel):
+    name: str
+    type: str
+    nullable: bool = True
+
+
+class DataCatalogEntryResponse(BaseModel):
+    id: str
+    organization_id: str
+    data_source_id: str
+    schema_name: Optional[str] = None
+    table_name: str
+    column_count: Optional[int] = None
+    row_estimate: Optional[int] = None
+    column_metadata: Optional[List[CatalogColumnMeta]] = None
+    tags: Optional[List[str]] = None
+    description: Optional[str] = None
+    discovered_at: datetime
+    updated_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CatalogImportRequest(BaseModel):
+    catalog_entry_id: str
+    dataset_name: Optional[str] = None
+    row_limit: Optional[int] = None  # None = all rows
