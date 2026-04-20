@@ -39,6 +39,13 @@ BEGIN
 END$$;
 """
     )
+    # Extend existing rulekind enum with advanced-feature values that were not
+    # present when the type was first created in f3f72ff529c3.
+    # ADD VALUE IF NOT EXISTS is idempotent — safe to run multiple times.
+    op.execute("ALTER TYPE rulekind ADD VALUE IF NOT EXISTS 'statistical_outlier'")
+    op.execute("ALTER TYPE rulekind ADD VALUE IF NOT EXISTS 'distribution_check'")
+    op.execute("ALTER TYPE rulekind ADD VALUE IF NOT EXISTS 'correlation_validation'")
+    op.execute("ALTER TYPE rulekind ADD VALUE IF NOT EXISTS 'ml_anomaly'")
     op.create_table(
         "rule_templates",
         sa.Column("id", sa.String(), nullable=False),
@@ -333,7 +340,9 @@ END$$;
     op.create_index(
         op.f("ix_data_quality_metrics_id"), "data_quality_metrics", ["id"], unique=False
     )
-    op.create_unique_constraint(None, "data_quality_metrics", ["execution_id"])
+    op.create_unique_constraint(
+        "uq_data_quality_metrics_execution_id", "data_quality_metrics", ["execution_id"]
+    )
     op.alter_column(
         "dataset_versions",
         "created_at",
@@ -423,8 +432,24 @@ END$$;
     op.drop_constraint(op.f("fk_rules_rule_family_id"), "rules", type_="foreignkey")
     op.drop_constraint(op.f("rules_compartment_id_fkey"), "rules", type_="foreignkey")
     op.drop_constraint(op.f("fk_rules_parent_rule_id"), "rules", type_="foreignkey")
-    op.create_foreign_key(None, "rules", "rules", ["parent_rule_id"], ["id"])
-    op.create_foreign_key(None, "rules", "rules", ["rule_family_id"], ["id"])
+    # Recreate with explicit names so the downgrade can drop them reliably.
+    # ondelete='SET NULL' preserved from original 9a4f8e2b1c5d / a1b2c3d4e5f6 definitions.
+    op.create_foreign_key(
+        "fk_rules_parent_rule_id_v2",
+        "rules",
+        "rules",
+        ["parent_rule_id"],
+        ["id"],
+        ondelete="SET NULL",
+    )
+    op.create_foreign_key(
+        "fk_rules_rule_family_id_v2",
+        "rules",
+        "rules",
+        ["rule_family_id"],
+        ["id"],
+        ondelete="SET NULL",
+    )
     op.drop_column("rules", "compartment_id")
     op.alter_column(
         "version_journal",
@@ -447,18 +472,13 @@ def downgrade() -> None:
         existing_nullable=True,
         existing_server_default=sa.text("now()"),
     )
-    op.create_index(
-        op.f("idx_users_guest_expires"),
-        "users",
-        ["is_guest", "guest_expires_at"],
-        unique=False,
-    )
+    # idx_users_guest_expires is owned by p4_perf_indexes — do not recreate here.
     op.add_column(
         "rules",
         sa.Column("compartment_id", sa.VARCHAR(), autoincrement=False, nullable=True),
     )
-    op.drop_constraint(None, "rules", type_="foreignkey")
-    op.drop_constraint(None, "rules", type_="foreignkey")
+    op.drop_constraint("fk_rules_parent_rule_id_v2", "rules", type_="foreignkey")
+    op.drop_constraint("fk_rules_rule_family_id_v2", "rules", type_="foreignkey")
     op.create_foreign_key(
         op.f("fk_rules_parent_rule_id"),
         "rules",
@@ -584,7 +604,9 @@ def downgrade() -> None:
         existing_nullable=True,
         existing_server_default=sa.text("now()"),
     )
-    op.drop_constraint(None, "data_quality_metrics", type_="unique")
+    op.drop_constraint(
+        "uq_data_quality_metrics_execution_id", "data_quality_metrics", type_="unique"
+    )
     op.drop_index(op.f("ix_data_quality_metrics_id"), table_name="data_quality_metrics")
     op.create_index(
         op.f("ix_data_quality_metrics_execution_id"),
@@ -641,15 +663,9 @@ def downgrade() -> None:
     op.drop_index(
         op.f("ix_access_requests_organization_id"), table_name="access_requests"
     )
-    op.create_index(
-        op.f("ix_access_requests_status"), "access_requests", ["status"], unique=False
-    )
-    op.create_index(
-        op.f("ix_access_requests_requester"),
-        "access_requests",
-        ["requester_id"],
-        unique=False,
-    )
+    # ix_access_requests_status and ix_access_requests_requester are owned by
+    # q5r6s7t8u9v0 — do not recreate them here or the downgrade will fail when
+    # that migration is still applied.
     op.drop_index(op.f("ix_debug_sessions_id"), table_name="debug_sessions")
     op.drop_table("debug_sessions")
     op.drop_index(op.f("ix_anomaly_scores_id"), table_name="anomaly_scores")
