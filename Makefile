@@ -13,10 +13,14 @@ YELLOW := \033[0;33m
 RED := \033[0;31m
 NC := \033[0m
 
+# Environment files
+DEV_ENV_FILE := .env
+PROD_SIM_ENV_FILE := .env.prod-sim
+
 # Docker Compose files
-COMPOSE := docker compose -f docker/compose/docker-compose.yml
+COMPOSE := APP_ENV_FILE=../../$(DEV_ENV_FILE) docker compose --env-file $(DEV_ENV_FILE) -f docker/compose/docker-compose.yml
 COMPOSE_DEV := $(COMPOSE) -f docker/compose/docker-compose.dev.yml
-COMPOSE_PROD_SIM := $(COMPOSE) -f docker/compose/docker-compose.prod-sim.yml
+COMPOSE_PROD_SIM := APP_ENV_FILE=../../$(PROD_SIM_ENV_FILE) docker compose --env-file $(PROD_SIM_ENV_FILE) -f docker/compose/docker-compose.yml -f docker/compose/docker-compose.prod-sim.yml
 
 # Enable Docker BuildKit
 export DOCKER_BUILDKIT := 1
@@ -77,9 +81,9 @@ prod-sim: prod-sim-build prod-sim-up ## Build and start production simulation
 
 prod-sim-build: ## Build production simulation containers
 	@echo "$(GREEN)Building production containers...$(NC)"
-	@if [ ! -f .env.prod-sim ]; then \
+	@if [ ! -f $(PROD_SIM_ENV_FILE) ]; then \
 		echo "$(YELLOW)Creating .env.prod-sim from .env.prod-sim.example$(NC)"; \
-		cp .env.prod-sim.example .env.prod-sim; \
+		cp .env.prod-sim.example $(PROD_SIM_ENV_FILE); \
 	fi
 	@$(COMPOSE_PROD_SIM) build --parallel
 	@echo "$(GREEN)✓ Build complete$(NC)"
@@ -138,7 +142,7 @@ db-migrate: ## Run database migrations (usage: make db-migrate [PROFILE=prod-sim
 
 prod-sim-migrate: ## Wait for DB and run migrations in prod-sim
 	@echo "$(BLUE)Waiting for database to be ready...$(NC)"
-	@./scripts/wait-for-db.sh grime-postgres admin data_hygiene
+	@set -a; . ./$(PROD_SIM_ENV_FILE); set +a; ./scripts/wait-for-db.sh grime-postgres "$${POSTGRES_USER:-admin}" "$${POSTGRES_DB:-data_hygiene}"
 	@echo "$(GREEN)Running migrations in production simulation...$(NC)"
 	@$(COMPOSE_PROD_SIM) exec backend alembic -c migrations/alembic.ini upgrade head
 	@echo "$(GREEN)✓ Production migrations complete$(NC)"
@@ -300,13 +304,13 @@ clean-all: clean clean-volumes clean-docker ## Nuclear option: clean everything
 
 setup: ## First-time project setup
 	@echo "$(GREEN)Setting up GRIME...$(NC)"
-	@if [ ! -f .env ]; then \
-		cp .env.example .env; \
-		echo "$(GREEN)✓ Created .env$(NC)"; \
+	@if [ ! -f $(DEV_ENV_FILE) ]; then \
+		cp .env.example $(DEV_ENV_FILE); \
+		echo "$(GREEN)✓ Created $(DEV_ENV_FILE)$(NC)"; \
 	fi
-	@if [ ! -f .env.prod-sim ]; then \
-		cp .env.prod-sim.example .env.prod-sim; \
-		echo "$(GREEN)✓ Created .env.prod-sim$(NC)"; \
+	@if [ ! -f $(PROD_SIM_ENV_FILE) ]; then \
+		cp .env.prod-sim.example $(PROD_SIM_ENV_FILE); \
+		echo "$(GREEN)✓ Created $(PROD_SIM_ENV_FILE)$(NC)"; \
 	fi
 	@chmod +x scripts/*.sh
 	@echo "$(GREEN)✓ Setup complete!$(NC)"
@@ -316,8 +320,8 @@ setup: ## First-time project setup
 
 env-check: ## Verify environment configuration
 	@echo "$(BLUE)Checking environment files...$(NC)"
-	@if [ -f .env ]; then echo "$(GREEN)✓ .env exists$(NC)"; else echo "$(RED)✗ .env missing$(NC)"; fi
-	@if [ -f .env.prod-sim ]; then echo "$(GREEN)✓ .env.prod-sim exists$(NC)"; else echo "$(YELLOW)⚠ .env.prod-sim missing$(NC)"; fi
+	@if [ -f $(DEV_ENV_FILE) ]; then echo "$(GREEN)✓ $(DEV_ENV_FILE) exists$(NC)"; else echo "$(RED)✗ $(DEV_ENV_FILE) missing$(NC)"; fi
+	@if [ -f $(PROD_SIM_ENV_FILE) ]; then echo "$(GREEN)✓ $(PROD_SIM_ENV_FILE) exists$(NC)"; else echo "$(YELLOW)⚠ $(PROD_SIM_ENV_FILE) missing$(NC)"; fi
 
 docker-info: ## Show Docker configuration
 	@echo "$(BLUE)Docker Configuration:$(NC)"

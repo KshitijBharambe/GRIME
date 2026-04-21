@@ -48,7 +48,7 @@ services:
       target: development
     environment:
       NODE_ENV: development
-      # NEXTAUTH_SECRET is loaded from ../../.env via env_file in base compose
+      # NEXTAUTH_SECRET is loaded from the active env file in the base compose
     volumes:
       # Mount source code for hot reload
       - ../../frontend:/app
@@ -66,7 +66,7 @@ services:
   postgres:
     environment:
       # Dev password — must be set in .env (no default; fail loudly if missing)
-      # POSTGRES_PASSWORD will be loaded from ../../.env (env_file on base compose)
+      # POSTGRES_PASSWORD will be loaded from the active env file in base compose
     ports:
       - "127.0.0.1:5432:5432" # Expose for local connections only (e.g., DBeaver, psql)
 
@@ -74,7 +74,7 @@ services:
   # MinIO - Development Overrides
   # ==========================================================================
   minio:
-    # Credentials are loaded from ../../.env via env_file in the base compose
+    # Credentials are loaded from the active env file in the base compose
     ports:
       - "127.0.0.1:9000:9000" # API
       - "127.0.0.1:9001:9001" # Console

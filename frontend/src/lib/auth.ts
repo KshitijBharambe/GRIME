@@ -1,13 +1,8 @@
-import NextAuth from "next-auth";
+import type { AuthOptions, Session, User } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import type { JWT } from "next-auth/jwt";
-import type { Session, User } from "next-auth";
 import { UserLogin, UserRole } from "@/types/api";
 import { getApiUrl } from "@/lib/config";
-
-if (process.env.NODE_ENV === "production" && !process.env.NEXTAUTH_SECRET) {
-  throw new Error("NEXTAUTH_SECRET must be set in production");
-}
 
 // Import API client dynamically to avoid SSR issues
 const getApiClient = async () => {
@@ -15,8 +10,16 @@ const getApiClient = async () => {
   return apiClient;
 };
 
-export default NextAuth({
-  secret: process.env.NEXTAUTH_SECRET,
+const getNextAuthSecret = () => {
+  if (process.env.NODE_ENV === "production" && !process.env.NEXTAUTH_SECRET) {
+    throw new Error("NEXTAUTH_SECRET must be set in production");
+  }
+
+  return process.env.NEXTAUTH_SECRET;
+};
+
+export const getAuthOptions = (): AuthOptions => ({
+  secret: getNextAuthSecret(),
   debug: process.env.NODE_ENV === "development",
   providers: [
     CredentialsProvider({

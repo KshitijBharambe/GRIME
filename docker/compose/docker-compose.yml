@@ -18,7 +18,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-admin}
       POSTGRES_DB: ${POSTGRES_DB:-data_hygiene}
     env_file:
-      - ../../.env
+      - ${APP_ENV_FILE:-../../.env}
     ports:
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
@@ -46,7 +46,7 @@ services:
     restart: unless-stopped
     command: server /data --console-address ":9001"
     env_file:
-      - ../../.env
+      - ${APP_ENV_FILE:-../../.env}
     ports:
       - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
       - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
@@ -64,7 +64,7 @@ services:
     depends_on:
       - minio
     env_file:
-      - ../../.env
+      - ${APP_ENV_FILE:-../../.env}
     entrypoint: >
       /bin/sh -c "
       attempt=0;
@@ -97,7 +97,7 @@ services:
       - postgres
       - minio
     env_file:
-      - ../../.env
+      - ${APP_ENV_FILE:-../../.env}
     environment:
       # Runtime constants (sourcing secret/config values from env_file)
       STORAGE_ENDPOINT: http://minio:9000
@@ -139,7 +139,7 @@ services:
     depends_on:
       - backend
     env_file:
-      - ../../.env
+      - ${APP_ENV_FILE:-../../.env}
     environment:
       # API URLs
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
@@ -155,7 +155,7 @@ services:
 
       # Authentication (if using NextAuth)
       NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
-      # NEXTAUTH_SECRET is loaded from ../../.env via env_file
+      # NEXTAUTH_SECRET is loaded from the active env file via env_file
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
     networks:
