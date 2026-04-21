@@ -116,9 +116,9 @@ prod-sim-logs: ## View production simulation logs
 
 prod-sim-clean: ## Clean production simulation (remove volumes)
 	@echo "$(RED)This will remove all volumes and data!$(NC)"
-	@read -p "Are you sure? [y/N] " -n 1 -r; \
+	@printf "Are you sure? [y/N] "; read -r REPLY; \
 	echo; \
-	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+	if [ "$$REPLY" = "Y" ] || [ "$$REPLY" = "y" ]; then \
 		$(COMPOSE_PROD_SIM) down -v; \
 		echo "$(GREEN)✓ Production simulation cleaned$(NC)"; \
 	else \
@@ -282,9 +282,9 @@ clean: ## Stop and remove all containers
 
 clean-volumes: ## Remove all volumes (WARNING: deletes data!)
 	@echo "$(RED)This will remove ALL DATA!$(NC)"
-	@read -p "Are you sure? [y/N] " -n 1 -r; \
+	@printf "Are you sure? [y/N] "; read -r REPLY; \
 	echo; \
-	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+	if [ "$$REPLY" = "Y" ] || [ "$$REPLY" = "y" ]; then \
 		$(COMPOSE_DEV) down -v; \
 		$(COMPOSE_PROD_SIM) down -v; \
 		echo "$(GREEN)✓ Volumes removed$(NC)"; \
