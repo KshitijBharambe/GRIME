@@ -340,6 +340,13 @@ END$$;
     op.create_index(
         op.f("ix_data_quality_metrics_id"), "data_quality_metrics", ["id"], unique=False
     )
+    # Migration 21f9a9779f17 created a unique INDEX on execution_id named
+    # ix_data_quality_metrics_execution_id. Here we replace it with a named
+    # UNIQUE CONSTRAINT so downgrade has a stable handle and the model's
+    # `unique=True` maps to a constraint rather than a bare index. Drop the
+    # old index first; IF EXISTS makes it safe when the index was never
+    # created (e.g. a clean install run through a rebased chain).
+    op.execute("DROP INDEX IF EXISTS ix_data_quality_metrics_execution_id")
     op.create_unique_constraint(
         "uq_data_quality_metrics_execution_id", "data_quality_metrics", ["execution_id"]
     )
@@ -608,11 +615,19 @@ def downgrade() -> None:
         "uq_data_quality_metrics_execution_id", "data_quality_metrics", type_="unique"
     )
     op.drop_index(op.f("ix_data_quality_metrics_id"), table_name="data_quality_metrics")
-    op.create_index(
-        op.f("ix_data_quality_metrics_execution_id"),
-        "data_quality_metrics",
-        ["execution_id"],
-        unique=True,
+    # Recreate the unique INDEX that upgrade() replaced with a constraint.
+    # Guard with DO block because upgrade's DROP INDEX IF EXISTS may leave
+    # us in either state depending on whether 21f9a9779f17 had run; CREATE
+    # INDEX IF NOT EXISTS would swallow a collision silently instead.
+    op.execute(
+        "DO $$ BEGIN "
+        "IF NOT EXISTS ("
+        "  SELECT 1 FROM pg_class WHERE relname = 'ix_data_quality_metrics_execution_id'"
+        ") THEN "
+        "  CREATE UNIQUE INDEX ix_data_quality_metrics_execution_id "
+        "    ON data_quality_metrics (execution_id); "
+        "END IF; "
+        "END $$;"
     )
     op.alter_column(
         "data_quality_metrics",

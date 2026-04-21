@@ -90,39 +90,28 @@ check_container() {
     fi
 }
 
-echo -e "${BLUE}Checking Supabase Services...${NC}"
+echo -e "${BLUE}Checking Infrastructure Services...${NC}"
 echo "───────────────────────────────────────────────────────────"
 
-# Supabase CLI creates containers with _API suffix (not prodsim-supabase- prefix)
-check_container "PostgreSQL Database" "supabase_db_API"
-check_container "Supabase Studio" "supabase_studio_API"
-check_container "Kong API Gateway" "supabase_kong_API"
-check_container "Auth Service" "supabase_auth_API"
-check_container "REST API (PostgREST)" "supabase_rest_API"
-check_container "Realtime Service" "supabase_realtime_API"
-check_container "Storage Service" "supabase_storage_API"
-check_container "Database Meta" "supabase_pg_meta_API"
-check_container "Email Testing (Inbucket)" "supabase_inbucket_API"
-check_container "pgBouncer Pooler" "supabase_pooler_API"
+# Container names are defined in docker/compose/docker-compose.yml
+check_container "PostgreSQL Database" "grime-postgres"
+check_container "MinIO Object Storage" "grime-minio"
 
 echo ""
 echo -e "${BLUE}Checking Application Services...${NC}"
 echo "───────────────────────────────────────────────────────────"
 
-check_container "Backend API" "prodsim-api"
-check_container "Frontend" "prodsim-frontend"
+check_container "Backend API" "grime-backend"
+check_container "Frontend" "grime-frontend"
 
 echo ""
 echo -e "${BLUE}Checking HTTP Endpoints...${NC}"
 echo "───────────────────────────────────────────────────────────"
 
 check_http "API Root" "http://localhost:8000/"
+check_http "API Health" "http://localhost:8000/health"
 check_http "API Docs" "http://localhost:8000/docs"
 check_http "Frontend" "http://localhost:3000/"
-# Note: Kong returns 404 for /, which is expected - check REST endpoint instead
-check_http "Supabase REST" "http://localhost:54321/rest/v1/"
-check_http "Supabase Studio" "http://localhost:54323/"
-check_http "Inbucket" "http://localhost:54324/"
 
 echo ""
 echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
@@ -139,13 +128,10 @@ if [ $UNHEALTHY -eq 0 ]; then
     echo ""
     echo -e "${BLUE}Service URLs:${NC}"
     echo "  Frontend:         http://localhost:3000"
-    echo "  API:             http://localhost:8000"
-    echo "  API Docs:        http://localhost:8000/docs"
-    echo "  Supabase Kong:   http://localhost:54321"
-    echo "  Supabase Studio: http://localhost:54323"
-    echo "  Inbucket:        http://localhost:54324"
-    echo "  PostgreSQL:      localhost:54322 (user: postgres, db: postgres)"
-    echo "  pgBouncer:       localhost:54329"
+    echo "  API:              http://localhost:8000"
+    echo "  API Docs:         http://localhost:8000/docs"
+    echo "  PostgreSQL:       internal only (prod-sim; exposed only in dev)"
+    echo "  MinIO:            internal only (prod-sim; console port 9001 in dev)"
     exit 0
 else
     echo -e "${YELLOW}⚠ Some services are unhealthy or not running${NC}"

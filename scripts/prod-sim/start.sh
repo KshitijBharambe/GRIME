@@ -80,7 +80,7 @@ fi
 echo ""
 
 # Check if containers are already running
-if docker ps | grep -q "prodsim-"; then
+if docker ps --format '{{.Names}}' | grep -q '^grime-'; then
     echo -e "${YELLOW}⚠ Production simulation containers are already running${NC}"
     echo ""
     read -p "Restart them? [y/N] " -n 1 -r
@@ -115,7 +115,7 @@ echo ""
 echo -e "${BLUE}Running database migrations...${NC}"
 ./scripts/wait-for-db.sh grime-postgres admin data_hygiene
 "${COMPOSE_CMD[@]}" exec backend alembic -c migrations/alembic.ini upgrade head
-echo -e "${GREEN}✓ Migrations complete$(NC)"
+echo -e "${GREEN}✓ Migrations complete${NC}"
 echo ""
 
 # Wait for services to be healthy
@@ -136,8 +136,8 @@ echo ""
 echo -e "${BLUE}Next steps:${NC}"
 echo "  1. Visit the frontend: http://localhost:3000"
 echo "  2. Explore the API docs: http://localhost:8000/docs"
-echo "  3. Manage database with Supabase Studio: http://localhost:54323"
-echo "  4. Check emails in Inbucket: http://localhost:54324"
+echo "  3. MinIO console (object storage): http://localhost:9001"
+echo "  4. Postgres: localhost:5432 (user: admin, db: data_hygiene)"
 echo ""
 echo -e "${BLUE}Useful commands:${NC}"
 echo "  make health-check       - Check service health"
