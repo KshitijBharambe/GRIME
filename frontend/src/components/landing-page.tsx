@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useMemo, useCallback, useState } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,21 +12,13 @@ import {
   AlertTriangle,
   Users,
   Check,
-  Star,
-  Twitter,
-  Github,
-  Linkedin,
   Play,
   Zap,
+  Loader2,
 } from "lucide-react";
 import { gsap } from "gsap";
-import dynamic from "next/dynamic";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
-
-const LiquidEther = dynamic(() => import("./LiquidEther"), {
-  ssr: false,
-  loading: () => <div className="w-full h-full bg-[#0b1220]" />,
-});
+import { signIn, getSession } from "next-auth/react";
 
 /* ------------------------------------------------------------------ */
 /*  Data                                                               */
@@ -136,34 +128,6 @@ const steps = [
   },
 ];
 
-const stats = [
-  { value: "50M+", label: "Rows Validated" },
-  { value: "99.9%", label: "Uptime" },
-  { value: "300+", label: "AI Teams" },
-  { value: "5M+", label: "Issues Detected" },
-];
-
-const testimonials = [
-  {
-    quote:
-      "DATAFORGE cut our annotation QA time by 80%. We caught 40K bad training examples before fine-tuning — our model accuracy jumped 6 points.",
-    author: "Anika Mehra",
-    role: "ML Lead, Synthesis AI",
-  },
-  {
-    quote:
-      "The anomaly detection models flagged subtle distribution shifts in our LLM eval set that our manual checks completely missed.",
-    author: "Jordan Tse",
-    role: "AI Data Engineer, NeuralWorks",
-  },
-  {
-    quote:
-      "We run DATAFORGE on every dataset version before training. It's the quality gate that ships with our MLOps pipeline now.",
-    author: "Carlos Rivas",
-    role: "Head of AI Infra, Apex Labs",
-  },
-];
-
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
@@ -173,12 +137,32 @@ export default function LandingPage() {
   const heroRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState("profiling");
 
-  const handleGetStarted = useCallback(() => {
-    router.push("/auth/register");
-  }, [router]);
+  const [isGuestLoading, setIsGuestLoading] = useState(false);
 
   const handleSignIn = useCallback(() => {
     router.push("/auth/login");
+  }, [router]);
+
+  const handleTryLive = useCallback(async () => {
+    setIsGuestLoading(true);
+    try {
+      let guestBrowserId = localStorage.getItem("guest_browser_id");
+      if (!guestBrowserId) {
+        guestBrowserId = crypto.randomUUID();
+        localStorage.setItem("guest_browser_id", guestBrowserId);
+      }
+      const result = await signIn("guest", {
+        redirect: false,
+        callbackUrl: "/dashboard",
+        guest_browser_id: guestBrowserId,
+      });
+      if (!result?.error) {
+        const session = await getSession();
+        if (session) router.push("/dashboard");
+      }
+    } finally {
+      setIsGuestLoading(false);
+    }
   }, [router]);
 
   const scrollToFeatures = useCallback(() => {
@@ -214,27 +198,6 @@ export default function LandingPage() {
     return () => ctx.revert();
   }, []);
 
-  const liquidEtherProps = useMemo(
-    () => ({
-      colors: ["#2563eb", "#1d4ed8", "#0b1220"],
-      mouseForce: 30,
-      cursorSize: 140,
-      isViscous: true,
-      viscous: 100,
-      iterationsViscous: 32,
-      iterationsPoisson: 32,
-      resolution: 0.4,
-      isBounce: true,
-      autoDemo: false,
-      autoSpeed: 0.5,
-      autoIntensity: 2.2,
-      takeoverDuration: 0.1,
-      autoResumeDelay: 3000,
-      autoRampDuration: 0.8,
-    }),
-    [],
-  );
-
   const activeFeature = featureTabs.find((t) => t.id === activeTab)!;
 
   return (
@@ -243,7 +206,7 @@ export default function LandingPage() {
       <header className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b border-border">
         <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 h-16">
           <span className="text-lg font-bold tracking-widest text-foreground">
-            DATAFORGE
+            GRIME
           </span>
           <nav className="hidden md:flex items-center gap-8 text-sm text-muted-foreground">
             <a
@@ -258,12 +221,6 @@ export default function LandingPage() {
             >
               How It Works
             </a>
-            <a
-              href="#testimonials"
-              className="hover:text-foreground transition-colors"
-            >
-              Testimonials
-            </a>
           </nav>
           <div className="flex items-center gap-2">
             <ThemeToggle className="text-muted-foreground hover:text-foreground" />
@@ -275,87 +232,76 @@ export default function LandingPage() {
               Sign In
             </Button>
             <Button
-              onClick={handleGetStarted}
+              onClick={handleTryLive}
+              disabled={isGuestLoading}
               className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg px-4 text-sm font-medium"
             >
-              Get Started
+              Try live example
             </Button>
           </div>
         </div>
       </header>
 
       {/* ── HERO ────────────────────────────────────────────── */}
-      <section ref={heroRef} className="relative overflow-hidden bg-[#0b1220]">
-        {/* LiquidEther — hero only, no pointer-events leak */}
-        <div
-          className="absolute inset-0 opacity-50 pointer-events-none"
-          aria-hidden="true"
-        >
-          <LiquidEther {...liquidEtherProps} />
-        </div>
-
-        <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 pt-24 pb-32 md:pt-36 md:pb-44 text-center">
+      <section
+        ref={heroRef}
+        className="relative overflow-hidden bg-[#0b1220]"
+        style={{
+          background:
+            "radial-gradient(ellipse 80% 60% at 50% -10%, #1e3a5f 0%, #0b1220 60%)",
+        }}
+      >
+        <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 pt-24 pb-28 md:pt-32 md:pb-36 text-center">
           <Badge
             variant="secondary"
             className="hero-title mb-6 bg-blue-500/10 text-blue-400 border-blue-500/20"
           >
-            Now in Public Beta — GenAI Data Prep
+            Public Beta — Data Quality for AI Teams
           </Badge>
 
-          <h1 className="hero-title text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight leading-[1.1]">
+          <h1 className="hero-title text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight leading-[1.1]">
             <span className="bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
-              Train Better AI.
+              Clean data.
             </span>
             <br />
             <span className="bg-gradient-to-r from-[#60a5fa] via-[#2563eb] to-[#60a5fa] bg-clip-text text-transparent">
-              Start With Clean Data.
+              Better models.
             </span>
           </h1>
 
-          <p className="hero-sub mt-6 text-lg md:text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed">
-            DATAFORGE is the data prep platform built for AI teams — profile
-            training corpora, validate LLM outputs, detect anomalies, and ship
-            cleaner models faster.
+          <p className="hero-sub mt-5 text-base md:text-lg text-slate-400 max-w-xl mx-auto leading-relaxed">
+            Profile training corpora, validate LLM outputs, and detect anomalies
+            — before they corrupt your model.
           </p>
 
-          <div className="hero-cta mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
+          <div className="hero-cta mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
             <Button
-              onClick={handleGetStarted}
+              onClick={handleTryLive}
               size="lg"
-              className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-xl px-8 py-6 text-base font-semibold shadow-lg shadow-blue-500/25 transition-all hover:shadow-blue-500/40 group"
+              disabled={isGuestLoading}
+              className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-xl px-7 py-5 text-base font-semibold shadow-lg shadow-blue-500/25 transition-all hover:shadow-blue-500/40 group"
             >
-              Get Started Free
-              <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
+              {isGuestLoading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Play className="mr-2 h-4 w-4" />
+              )}
+              See live example
             </Button>
             <Button
-              variant="outline"
+              variant="ghost"
               size="lg"
-              onClick={scrollToFeatures}
-              className="border-white/15 text-white hover:bg-white/5 rounded-xl px-8 py-6 text-base font-semibold group bg-transparent"
+              onClick={handleSignIn}
+              className="text-slate-300 hover:text-white hover:bg-white/5 rounded-xl px-7 py-5 text-base font-semibold"
             >
-              <Play className="mr-2 h-4 w-4" />
-              See How It Works
+              Sign in
+              <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </div>
 
-          {/* Product mockup placeholder */}
-          <div className="mt-16 mx-auto max-w-4xl aspect-video rounded-2xl border border-white/10 bg-gradient-to-br from-[#111827] via-[#0f172a] to-[#111827] shadow-2xl flex items-center justify-center">
-            <span className="text-slate-600 text-sm">Dashboard Preview</span>
-          </div>
-        </div>
-      </section>
-
-      {/* ── STATS BAR ──────────────────────────────────────── */}
-      <section className="border-y border-border bg-muted py-10 px-4 sm:px-6">
-        <div className="max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-8">
-          {stats.map((s) => (
-            <div key={s.label} className="text-center">
-              <p className="text-3xl md:text-4xl font-extrabold text-primary">
-                {s.value}
-              </p>
-              <p className="text-sm text-muted-foreground mt-1">{s.label}</p>
-            </div>
-          ))}
+          <p className="hero-cta mt-3 text-xs text-slate-500">
+            No signup required &mdash; explore as a guest instantly.
+          </p>
         </div>
       </section>
 
@@ -479,86 +425,36 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── TESTIMONIALS ───────────────────────────────────── */}
-      <section
-        id="testimonials"
-        className="py-24 md:py-32 px-4 sm:px-6 bg-background"
-      >
-        <div className="max-w-6xl mx-auto">
-          <h2 className="text-3xl md:text-4xl font-bold text-center mb-14 text-foreground">
-            Trusted by AI Teams
-          </h2>
-          <div className="grid md:grid-cols-3 gap-6">
-            {testimonials.map((t) => (
-              <div
-                key={t.author}
-                className="rounded-xl border border-border bg-card p-6"
-              >
-                <div className="flex gap-1 mb-4">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <Star
-                      key={i}
-                      className="h-4 w-4 fill-primary text-primary"
-                    />
-                  ))}
-                </div>
-                <p className="text-muted-foreground text-sm leading-relaxed mb-6">
-                  &ldquo;{t.quote}&rdquo;
-                </p>
-                <div>
-                  <p className="font-semibold text-sm text-foreground">
-                    {t.author}
-                  </p>
-                  <p className="text-muted-foreground text-xs">{t.role}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="mt-16 flex flex-wrap items-center justify-center gap-10">
-            {[
-              "Synthesis AI",
-              "NeuralWorks",
-              "Apex Labs",
-              "TechVentures",
-              "CloudScale",
-            ].map((name) => (
-              <span
-                key={name}
-                className="text-muted-foreground/60 text-sm font-medium tracking-wide"
-              >
-                {name}
-              </span>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* ── CTA BANNER ─────────────────────────────────────── */}
-      <section className="py-20 px-4 sm:px-6 bg-[#0b1220]">
-        <div className="max-w-3xl mx-auto text-center">
-          <h2 className="text-3xl md:text-4xl font-bold mb-4 text-white">
+      <section className="py-16 px-4 sm:px-6 bg-[#0b1220]">
+        <div className="max-w-2xl mx-auto text-center">
+          <h2 className="text-2xl md:text-3xl font-bold mb-3 text-white">
             Ready to ship cleaner models?
           </h2>
-          <p className="text-slate-400 mb-8 text-lg">
-            Start validating your training data in minutes. No credit card
-            required.
+          <p className="text-slate-400 mb-6">
+            No signup required. Explore immediately as a guest.
           </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
             <Button
-              onClick={handleGetStarted}
+              onClick={handleTryLive}
+              disabled={isGuestLoading}
               size="lg"
-              className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-xl px-8 py-6 text-base font-semibold shadow-lg shadow-blue-500/30 group"
+              className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-xl px-7 text-base font-semibold shadow-lg shadow-blue-500/30 group"
             >
-              Get Started Free
-              <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
+              {isGuestLoading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Play className="mr-2 h-4 w-4" />
+              )}
+              Try live example
             </Button>
             <Button
-              variant="outline"
+              variant="ghost"
               size="lg"
               onClick={handleSignIn}
-              className="border-white/15 text-white hover:bg-white/5 rounded-xl px-8 py-6 text-base font-semibold bg-transparent"
+              className="text-slate-300 hover:text-white hover:bg-white/5 rounded-xl px-7 text-base font-semibold"
             >
-              Sign In
+              Sign in
             </Button>
           </div>
         </div>
@@ -570,7 +466,7 @@ export default function LandingPage() {
           {/* Brand */}
           <div className="col-span-2 md:col-span-1">
             <span className="text-lg font-bold tracking-widest text-foreground">
-              DATAFORGE
+              GRIME
             </span>
             <p className="text-muted-foreground text-sm mt-3 leading-relaxed">
               The data prep platform for AI teams that ship reliable models.
@@ -669,29 +565,14 @@ export default function LandingPage() {
         {/* Bottom bar */}
         <div className="max-w-6xl mx-auto mt-12 pt-8 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-muted-foreground text-sm">
-            &copy; {new Date().getFullYear()} DATAFORGE. All rights reserved.
+            &copy; {new Date().getFullYear()} GRIME. All rights reserved.
           </p>
-          <div className="flex items-center gap-4">
-            <a
-              href="#"
-              className="text-muted-foreground hover:text-foreground transition-colors"
-              aria-label="Twitter"
-            >
-              <Twitter className="h-5 w-5" />
+          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+            <a href="#" className="hover:text-foreground transition-colors">
+              GitHub
             </a>
-            <a
-              href="#"
-              className="text-muted-foreground hover:text-foreground transition-colors"
-              aria-label="GitHub"
-            >
-              <Github className="h-5 w-5" />
-            </a>
-            <a
-              href="#"
-              className="text-muted-foreground hover:text-foreground transition-colors"
-              aria-label="LinkedIn"
-            >
-              <Linkedin className="h-5 w-5" />
+            <a href="#" className="hover:text-foreground transition-colors">
+              Twitter
             </a>
           </div>
         </div>

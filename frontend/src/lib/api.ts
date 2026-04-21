@@ -44,6 +44,13 @@ import {
   GuestLoginResponse,
   PersonalRegisterRequest,
   PersonalRegisterResponse,
+  DataSource,
+  DataSourceCreate,
+  DataSourceUpdate,
+  DataSourceTestResult,
+  DataCatalogEntry,
+  CatalogImportRequest,
+  CatalogImportResult,
 } from "@/types/api";
 import { getApiUrl } from "./config";
 
@@ -978,6 +985,56 @@ class ApiClient {
     config?: Record<string, unknown>,
   ): Promise<AxiosResponse<T>> {
     return this.client.delete<T>(url, config);
+  }
+
+  // Data Sources
+  async getDataSources(): Promise<DataSource[]> {
+    const r = await this.client.get<DataSource[]>("/api/data-sources");
+    return r.data;
+  }
+
+  async getDataSource(id: string): Promise<DataSource> {
+    const r = await this.client.get<DataSource>(`/api/data-sources/${id}`);
+    return r.data;
+  }
+
+  async createDataSource(payload: DataSourceCreate): Promise<DataSource> {
+    const r = await this.client.post<DataSource>("/api/data-sources", payload);
+    return r.data;
+  }
+
+  async updateDataSource(id: string, payload: DataSourceUpdate): Promise<DataSource> {
+    const r = await this.client.patch<DataSource>(`/api/data-sources/${id}`, payload);
+    return r.data;
+  }
+
+  async deleteDataSource(id: string): Promise<void> {
+    await this.client.delete(`/api/data-sources/${id}`);
+  }
+
+  async testDataSourceConnection(id: string): Promise<DataSourceTestResult> {
+    const r = await this.client.post<DataSourceTestResult>(`/api/data-sources/${id}/test`);
+    return r.data;
+  }
+
+  async syncDataSourceCatalog(id: string): Promise<DataCatalogEntry[]> {
+    const r = await this.client.post<DataCatalogEntry[]>(`/api/data-sources/${id}/sync`);
+    return r.data;
+  }
+
+  async getDataSourceCatalog(id: string): Promise<DataCatalogEntry[]> {
+    const r = await this.client.get<DataCatalogEntry[]>(`/api/data-sources/${id}/catalog`);
+    return r.data;
+  }
+
+  async importCatalogEntry(sourceId: string, payload: CatalogImportRequest): Promise<CatalogImportResult> {
+    const r = await this.client.post<CatalogImportResult>(`/api/data-sources/${sourceId}/catalog/import`, payload);
+    return r.data;
+  }
+
+  async getAllCatalogEntries(): Promise<DataCatalogEntry[]> {
+    const r = await this.client.get<DataCatalogEntry[]>("/api/data-sources/catalog/all");
+    return r.data;
   }
 }
 

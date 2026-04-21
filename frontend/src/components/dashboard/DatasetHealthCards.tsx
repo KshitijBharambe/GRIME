@@ -11,8 +11,11 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useDatasets } from "@/lib/hooks/useDatasets";
 import { useDashboardOverview } from "@/lib/hooks/useDashboard";
-import { Database, CheckCircle, AlertTriangle, XCircle } from "lucide-react";
+import { Database, CheckCircle, AlertTriangle, XCircle, Cable } from "lucide-react";
 import { Dataset } from "@/types/api";
+import { useDataSources } from "@/lib/hooks/useDataSources";
+import { EmptyState } from "@/components/ui/state-views";
+import { useRouter } from "next/navigation";
 
 function getStatusColor(status: string) {
   switch (status) {
@@ -48,14 +51,17 @@ function getQualityLabel(score: number): { label: string; color: string } {
 }
 
 export function DatasetHealthCards() {
+  const router = useRouter();
   const { data: datasetsResponse, isLoading: datasetsLoading } = useDatasets(
     1,
     100,
   );
   const { data: dashboardOverview, isLoading: overviewLoading } =
     useDashboardOverview();
+  const { data: dataSourcesResponse, isLoading: dataSourcesLoading } =
+    useDataSources();
 
-  const isLoading = datasetsLoading || overviewLoading;
+  const isLoading = datasetsLoading || overviewLoading || dataSourcesLoading;
 
   if (isLoading) {
     return (
@@ -85,8 +91,12 @@ export function DatasetHealthCards() {
   const qualityDist = dashboardOverview?.statistics?.quality_score_distribution;
   const avgDqi = dashboardOverview?.overview?.avg_dqi ?? 0;
   const avgCleanRows = dashboardOverview?.overview?.avg_clean_rows_pct ?? 0;
+  const dataSources = dataSourcesResponse ?? [];
 
   if (datasets.length === 0) {
+    const hasDataSources = Array.isArray(dataSources) && dataSources.length > 0;
+    const firstSource = hasDataSources ? dataSources[0] : null;
+
     return (
       <Card>
         <CardHeader>
@@ -97,9 +107,31 @@ export function DatasetHealthCards() {
           <CardDescription>Quality summary per dataset</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="text-center py-6 text-sm text-muted-foreground">
-            No datasets found. Upload a dataset to see health metrics.
-          </div>
+          {hasDataSources ? (
+            <EmptyState
+              icon={Cable}
+              title="No datasets yet"
+              description={`You have ${dataSources.length} connected source${dataSources.length !== 1 ? "s" : ""}. Import a table to start validating.`}
+              action={{
+                label: firstSource
+                  ? `Run import from ${firstSource.name}`
+                  : "Go to Data Sources",
+                onClick: () => router.push("/data-sources"),
+              }}
+              className="border-0 shadow-none"
+            />
+          ) : (
+            <EmptyState
+              icon={Database}
+              title="No datasets yet"
+              description="Upload a CSV or connect a data source to see health metrics."
+              action={{
+                label: "Upload dataset",
+                onClick: () => router.push("/data/upload"),
+              }}
+              className="border-0 shadow-none"
+            />
+          )}
         </CardContent>
       </Card>
     );

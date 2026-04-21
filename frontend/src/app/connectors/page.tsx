@@ -3,7 +3,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import { MainLayout } from "@/components/layout/main-layout";
-import { UnderTestingState } from "@/components/under-testing-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -178,14 +177,12 @@ function CardFooterActions({
   isConnected,
   isConnecting,
   isConfiguring,
-  isUnderTesting,
   onConnect,
 }: Readonly<{
   connector: ConnectorDef;
   isConnected: boolean;
   isConnecting: boolean;
   isConfiguring: boolean;
-  isUnderTesting: boolean;
   onConnect: () => void;
 }>) {
   if (connector.status === "coming_soon") {
@@ -208,8 +205,7 @@ function CardFooterActions({
           variant="outline"
           className="h-9 px-3"
           onClick={onConnect}
-          disabled={isUnderTesting}
-        >
+                 >
           <Settings2 className="mr-1.5 h-4 w-4" />
           Configure
         </Button>
@@ -224,8 +220,7 @@ function CardFooterActions({
           size="sm"
           variant="outline"
           className="h-9 w-full justify-between"
-          disabled={isUnderTesting}
-        >
+                 >
           <span className="flex items-center gap-2">
             <Plug className="h-4 w-4" />
             Manage webhooks
@@ -242,7 +237,7 @@ function CardFooterActions({
       variant={isConfiguring ? "outline" : "default"}
       className="h-9 w-full"
       onClick={onConnect}
-      disabled={isConnecting || isUnderTesting}
+      disabled={isConnecting}
     >
       {isConnecting && (
         <>
@@ -271,7 +266,6 @@ function ConnectorCard({
   isConnected,
   isConnecting,
   isConfiguring,
-  isUnderTesting,
   onConnect,
   onCancelConfig,
   onSave,
@@ -280,7 +274,6 @@ function ConnectorCard({
   isConnected: boolean;
   isConnecting: boolean;
   isConfiguring: boolean;
-  isUnderTesting: boolean;
   onConnect: () => void;
   onCancelConfig: () => void;
   onSave: () => void;
@@ -366,8 +359,7 @@ function ConnectorCard({
                 size="sm"
                 className="h-9 px-4"
                 onClick={onSave}
-                disabled={isUnderTesting}
-              >
+                             >
                 <Check className="mr-1.5 h-4 w-4" />
                 Save
               </Button>
@@ -376,8 +368,7 @@ function ConnectorCard({
                 variant="outline"
                 className="h-9 px-4"
                 onClick={onCancelConfig}
-                disabled={isUnderTesting}
-              >
+                             >
                 Cancel
               </Button>
             </div>
@@ -390,7 +381,6 @@ function ConnectorCard({
             isConnected={isConnected}
             isConnecting={isConnecting}
             isConfiguring={isConfiguring}
-            isUnderTesting={isUnderTesting}
             onConnect={onConnect}
           />
         </div>
@@ -400,7 +390,6 @@ function ConnectorCard({
 }
 
 export default function ConnectorsPage() {
-  const isUnderTesting = true;
   const [connecting, setConnecting] = useState<string | null>(null);
   const [connected, setConnected] = useState<string[]>([]);
   const [configuring, setConfiguring] = useState<string | null>(null);
@@ -410,7 +399,6 @@ export default function ConnectorsPage() {
   ).length;
 
   function handleConnect(id: string) {
-    if (isUnderTesting) return;
     if (configuring === id) {
       setConfiguring(null);
       return;
@@ -424,7 +412,6 @@ export default function ConnectorsPage() {
   }
 
   function handleSave(id: string) {
-    if (isUnderTesting) return;
     setConfiguring(null);
     setConnecting(id);
     setTimeout(() => {
@@ -480,8 +467,6 @@ export default function ConnectorsPage() {
           </div>
         </section>
 
-        <UnderTestingState featureName="Data source connectors" />
-
         <section className="space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -505,7 +490,6 @@ export default function ConnectorsPage() {
                 isConnected={connected.includes(connector.id)}
                 isConnecting={connecting === connector.id}
                 isConfiguring={configuring === connector.id}
-                isUnderTesting={isUnderTesting}
                 onConnect={() => handleConnect(connector.id)}
                 onCancelConfig={handleCancelConfig}
                 onSave={() => handleSave(connector.id)}

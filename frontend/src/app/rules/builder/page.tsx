@@ -84,6 +84,13 @@ import {
   registerCustomBlocksIntoRegistry,
 } from "@/lib/rules/blockPaletteConfig";
 import type { PaletteCategoryDef } from "@/lib/rules/blockPaletteConfig";
+import dynamic from "next/dynamic";
+import type { CanvasRule } from "@/components/rules/builder/types";
+
+const FlowCanvas = dynamic(
+  () => import("@/components/rules/builder/FlowCanvas"),
+  { ssr: false },
+);
 
 // ─── Icon map for palette categories ─────────────────────────────────────────
 
@@ -1680,6 +1687,7 @@ export default function RuleBuilderPage() {
   const [activeDragData, setActiveDragData] = useState<DragActiveData | null>(
     null,
   );
+  const [mode, setMode] = useState<"simple" | "flow">("simple");
 
   // Palette state
   const [customBlockDefs, setCustomBlockDefs] = useState<CustomBlockDef[]>([]);
@@ -2289,6 +2297,12 @@ export default function RuleBuilderPage() {
     setTimeout(() => setSavedAlert(false), 3000);
   };
 
+  const handleFlowSave = (rule: CanvasRule) => {
+    console.log("Flow rule payload:", rule);
+    setSavedAlert(true);
+    setTimeout(() => setSavedAlert(false), 3000);
+  };
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -2338,12 +2352,38 @@ export default function RuleBuilderPage() {
                   <div className="flex items-center gap-2">
                     <Layers className="h-4 w-4 text-muted-foreground" />
                     <h1 className="text-base font-semibold text-foreground">
-                      Rule Builder
+                      Flow Builder
                     </h1>
+                    {/* Mode toggle */}
+                    <div className="ml-2 flex items-center rounded-md border border-border bg-muted p-0.5">
+                      <button
+                        onClick={() => setMode("simple")}
+                        className={cn(
+                          "inline-flex h-6 items-center rounded px-2.5 text-[11px] font-medium transition-colors",
+                          mode === "simple"
+                            ? "bg-background text-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        Simple
+                      </button>
+                      <button
+                        onClick={() => setMode("flow")}
+                        className={cn(
+                          "inline-flex h-6 items-center rounded px-2.5 text-[11px] font-medium transition-colors",
+                          mode === "flow"
+                            ? "bg-background text-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        Flow
+                      </button>
+                    </div>
                   </div>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Build rule groups with drag and drop, then validate before
-                    saving.
+                    {mode === "flow"
+                      ? "Canvas editor — connect condition nodes to AND / OR groups."
+                      : "Build rule groups with drag and drop, then validate before saving."}
                   </p>
                 </div>
                 <div className="flex min-w-0 items-center gap-2">
@@ -2358,43 +2398,50 @@ export default function RuleBuilderPage() {
                 </div>
               </div>
 
-              <div className="ml-auto flex items-center gap-2 shrink-0">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleTest}
-                  disabled={isTesting || totalBlockCount === 0}
-                  className={cn(
-                    "h-8 gap-1.5 px-3",
-                    isTesting && "cursor-not-allowed opacity-50",
-                  )}
-                >
-                  {isTesting ? (
-                    <>
-                      <Zap className="h-3.5 w-3.5 animate-pulse" />
-                      <span>Testing…</span>
-                    </>
-                  ) : (
-                    <>
-                      <Play className="h-3.5 w-3.5" />
-                      <span>Run Test</span>
-                    </>
-                  )}
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={handleSave}
-                  disabled={totalBlockCount === 0}
-                  className="h-8 gap-1.5 px-3 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <Save className="h-3.5 w-3.5" />
-                  <span>Save</span>
-                </Button>
-              </div>
+              {mode === "simple" && (
+                <div className="ml-auto flex items-center gap-2 shrink-0">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleTest}
+                    disabled={isTesting || totalBlockCount === 0}
+                    className={cn(
+                      "h-8 gap-1.5 px-3",
+                      isTesting && "cursor-not-allowed opacity-50",
+                    )}
+                  >
+                    {isTesting ? (
+                      <>
+                        <Zap className="h-3.5 w-3.5 animate-pulse" />
+                        <span>Testing…</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play className="h-3.5 w-3.5" />
+                        <span>Run Test</span>
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleSave}
+                    disabled={totalBlockCount === 0}
+                    className="h-8 gap-1.5 px-3 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <Save className="h-3.5 w-3.5" />
+                    <span>Save</span>
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
 
           {/* ── Main content ── */}
+          {mode === "flow" ? (
+            <div className="flex flex-1 overflow-hidden">
+              <FlowCanvas ruleName={ruleName} onSave={handleFlowSave} />
+            </div>
+          ) : (
           <div className="flex flex-1 overflow-hidden bg-muted/20">
             {/* ── Left palette ── */}
             <div
@@ -2768,6 +2815,7 @@ export default function RuleBuilderPage() {
               )}
             </div>
           </div>
+          )}
         </div>
 
         <DragOverlay dropAnimation={{ duration: 200, easing: "ease" }}>
